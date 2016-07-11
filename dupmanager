@@ -1,0 +1,108 @@
+#!/usr/bin/env python
+from __future__ import print_function
+
+import hashlib
+import sys
+import os
+import sqlite3
+import subprocess
+from itertools import islice
+
+BYTES = 2048
+
+def in_groups_of(size, iterator):
+    iterator = iter(iterator)
+    while True:
+        acc = list(islice(iterator, size))
+        if not acc:
+            break
+        yield acc
+
+def hashInitial(path):
+    with open(path, 'rb') as f:
+        md5 = hashlib.md5(f.read(BYTES))
+        f.seek(0, 2)
+        remain = f.tell() - BYTES
+        if remain > 0:
+            remain = min(remain, BYTES)
+            f.seek(-remain, 2)
+            md5.update(f.read(remain))
+        return md5.hexdigest()
+
+def iterHashes(basepath):
+    for dirpath, dirnames, filenames in os.walk(basepath):
+        for filename in filenames:
+            path = os.path.join(dirpath, filename)
+            try:
+                yield path, hashInitial(path), os.path.getsize(path)
+            except IOError:
+                print('IOError on', path, file=sys.stderr)
+
+def dumpInitialHashes(basepath):
+    for path, hash in iterHashes(basepath):
+        print('{}\t{}'.format(hash, path))
+
+def dumpToSqlite(connection, basepath):
+    connection.execute('create table if not exists bookends (path, hash, size)')
+    for group in in_groups_of(128, iterHashes(basepath)):
+        connection.executemany('insert into bookends values (?, ?, ?)', group)
+        connection.commit()
+        sys.stderr.write('.')
+        sys.stderr.flush()
+
+def unmatched(connection, basepath):
+    c = connection.cursor()
+    print("Fetching hashes", file=sys.stderr)
+    c.execute('select hash from bookends')
+    hashes = set(hash for hash, in c.fetchall())
+    print("Walking", file=sys.stderr)
+    for path, hash, size in iterHashes(basepath):
+        if hash not in hashes:
+            print(path)
+
+def fileEq(path1, path2):
+    return not subprocess.Popen(['cmp', '-s', path1, path2]).wait()
+
+def deleteDupesIn(conn, connPath, basepath):
+    # BE CAREFUL OF THE ARGUMENT ORDER!
+    files = dict(conn.execute('select hash, path from bookends'))
+    for path, hash, size in iterHashes(basepath):
+        existingFile = files.get(hash, None)
+        if existingFile is None or os.path.getsize(path) == 0:
+            continue
+        existingPath = os.path.join(connPath, existingFile)
+        if fileEq(path, existingPath):
+            print('{}\t{}'.format(path.encode('utf8'), existingPath.encode('utf8')))
+            os.unlink(path)
+        else:
+            print("FALSE POSITIVE", existingPath.encode('utf8'), path.encode('utf8'), file=sys.stderr)
+
+def joinDBs(tgt, otherDbs):
+    c = sqlite3.connect(tgt)
+    c.execute('create table if not exists bookends (path, hash, size)')
+    for other in otherDbs:
+        c2 = sqlite3.connect(other)
+        c.executemany('insert into bookends values (?, ?, ?)', c2.execute('select path, hash, size from bookends'))
+        c.commit()
+
+if __name__ == '__main__':
+    cmd = sys.argv[1]
+    if cmd == 'dump':
+        dumpInitialHashes(sys.argv[2])
+    elif cmd == 'db':
+        db, basepath = sys.argv[2:]
+        dumpToSqlite(sqlite3.connect(db), basepath)
+    elif cmd == 'unmatched':
+        db, basepath = sys.argv[2:]
+        unmatched(sqlite3.connect(db), basepath)
+    elif cmd == 'del':
+        db, dbPath, basepath = sys.argv[2:]
+        print('Deleting from', basepath, 'files that were in', dbPath, file=sys.stderr)
+        deleteDupesIn(sqlite3.connect(db), dbPath, basepath)
+    elif cmd == 'join':
+        tgt = sys.argv[2]
+        otherDbs = sys.argv[3:]
+        joinDBs(tgt, otherDbs)
+    else:
+        print('huh?', cmd)
+

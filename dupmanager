@@ -100,6 +100,7 @@ if __name__ == '__main__':
     elif cmd == 'del':
         db, dbPath, basepath = sys.argv[2:]
         print('Deleting from', basepath, 'files that were in', dbPath, file=sys.stderr)
+        input()
         deleteDupesIn(sqlite3.connect(db), dbPath, basepath)
     elif cmd == 'join':
         tgt = sys.argv[2]

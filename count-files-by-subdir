@@ -20,9 +20,12 @@ if __name__ == '__main__':
     root = sys.argv[1] if len(sys.argv) > 1 else '.'
     pairs = []
     total = 0
-    for subdir in subdirs(root):
+    for subdir in ['.'] + subdirs(root):
         print(subdir, ' ', end='', flush=True)
-        this = count_files_in_directory(subdir)
+        if subdir == '.':
+            this = sum(1 for name in os.listdir(root) if not os.path.isdir(os.path.join(root, name)))
+        else:
+            this = count_files_in_directory(subdir)
         print(this, flush=True)
         pairs.append((this, subdir))
         total += this

@@ -34,6 +34,8 @@ def iterHashes(basepath):
         for filename in filenames:
             path = os.path.join(dirpath, filename)
             try:
+                if os.path.islink(path):
+                    continue
                 yield path, hashInitial(path), os.path.getsize(path)
             except IOError:
                 print('IOError on', path, file=sys.stderr)

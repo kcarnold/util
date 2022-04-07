@@ -1,0 +1,35 @@
+#!/usr/bin/env python
+# Given some Markdown on the clipboard,
+# convert it to HTML using pandoc
+# and put it back on the clipboard as HTML that can be pasted in a browser.
+# 
+# Unlike https://assortedarray.com/posts/copy-rich-text-cmd-mac/ this handles Unicode characters correctly.
+# It also handles a common case where the Markdown was in an Excel cell, so it gets copied as a one-entry CSV.
+
+import subprocess
+import pasteboard
+
+pb = pasteboard.Pasteboard()
+
+# Get Markdown text
+md = pb.get_contents(type=pasteboard.String)
+if isinstance(md, str):
+    md = md.encode('utf-8')
+assert isinstance(md, bytes) # If you fail here it's probably because the clipboard already has HTML or something else that's not plain text.
+
+# Handle copying from Excel
+if md.startswith(b'"') and md.endswith(b'"'):
+    import csv, io
+    md = next(
+        csv.reader(io.StringIO(md.decode('utf-8')))
+    )[0].encode('utf-8')
+
+
+# Convert to HTML
+html = subprocess.check_output(
+    ['pandoc', '-f', 'markdown', '--wrap=none', '-t', 'html'],
+    input=md
+)
+
+# Put back on clipboard
+pb.set_contents(html.decode('utf-8'), pasteboard.HTML)

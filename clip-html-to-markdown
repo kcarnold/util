@@ -1,0 +1,2 @@
+#!/bin/sh
+pbpaste -Prefer public.html | pandoc -f html -t markdown-raw_html-raw_attribute-native_divs-native_spans-fenced_divs-bracketed_spans --wrap=none | pbcopy

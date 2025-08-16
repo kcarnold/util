@@ -4,6 +4,21 @@ from pathlib import Path
 
 import streamlit as st
 from usfm_grammar import Filter, USFMParser
+from typing import Any, Dict
+
+
+@st.cache_data
+def parse_usfm(raw_text: str) -> Dict[str, Any]:
+    """Parse USFM text and return the USJ structure.
+
+    Cached by streamlit to avoid re-parsing the same text repeatedly.
+    """
+    parser = USFMParser(raw_text)
+    if parser.errors:
+        return {"errors": parser.errors}
+
+    usj = parser.to_usj(include_markers=Filter.BCV + Filter.TEXT)
+    return {"usj": usj}
 
 
 def main():
@@ -22,15 +37,15 @@ def streamlit_app():
     if file is None:
         st.stop()
 
-    parser = USFMParser(file.read().decode("utf-8"))
-    if parser.errors:
+    raw = file.read().decode("utf-8")
+    result = parse_usfm(raw)
+    if "errors" in result:
         st.write("Errors in USFM file:")
-        for error in parser.errors:
+        for error in result["errors"]:
             st.write(error)
         st.stop()
 
-    usj = parser.to_usj(include_markers=Filter.BCV+Filter.TEXT)
-
+    usj: Dict[str, Any] = result["usj"]
     usj_content = usj['content']
 
     books = [x['code'] for x in usj_content if isinstance(x, dict) and x['type'] == 'book']

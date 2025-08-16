@@ -7,7 +7,7 @@ import zipfile
 
 import streamlit as st
 from usfm_grammar import Filter, USFMParser
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @st.cache_data
@@ -22,6 +22,41 @@ def parse_usfm(raw_text: str) -> Dict[str, Any]:
 
     usj = parser.to_usj(include_markers=Filter.BCV + Filter.TEXT)
     return {"usj": usj}
+
+
+def extract_id_h(usfm_text: str) -> Tuple[Optional[str], Optional[str]]:
+    r"""Extract the initial \id and \h markers from the start of a USFM text.
+
+    Returns (id, h) where each may be None if not found.
+    """
+    id_line: Optional[str] = None
+    h_line: Optional[str] = None
+    head = usfm_text[:2000]
+    for line in head.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith('\\id') and id_line is None:
+            id_line = line[3:].strip()
+        elif line.startswith('\\h') and h_line is None:
+            h_line = line[2:].strip()
+        if id_line is not None and h_line is not None:
+            break
+    return id_line, h_line
+
+
+def get_label(sample_text, name):
+    id_line, h_line = extract_id_h(sample_text)
+    label = ''
+    if id_line:
+        label += f"{id_line}"
+    if h_line:
+        if label:
+            label += f": {h_line}"
+        else:
+            label = h_line
+    label = label if label else name
+    return label
 
 
 def main():
@@ -66,9 +101,24 @@ def streamlit_app():
         if not usfm_files:
             st.write("No .usfm files found inside the ZIP archive.")
             st.stop()
-
         usfm_files.sort(key=_natural_key)
-        chosen = st.selectbox("Select .usfm file from ZIP", usfm_files)
+        # Build a mapping from filename -> label showing extracted \id and \h
+        label_map: Dict[str, str] = {}
+        for name in usfm_files:
+            try:
+                sample = z.read(name)
+            except KeyError:
+                label_map[name] = f"{name} (missing)"
+                continue
+            # decode with replace to avoid stopping selection creation on decode errors
+            try:
+                sample_text = sample.decode('utf-8')
+            except Exception:
+                sample_text = sample.decode('utf-8', errors='replace')
+            label_map[name] = get_label(sample_text, name)
+
+        # Show the selectbox displaying labels but returning the actual filename
+        chosen = st.selectbox("Select book", usfm_files, format_func=lambda n: label_map.get(n, str(n)))
         try:
             raw = z.read(chosen).decode("utf-8")
         except KeyError:
@@ -79,6 +129,8 @@ def streamlit_app():
             st.stop()
     else:
         raw = file.read().decode("utf-8")
+        # Show extracted markers for single uploaded files
+        st.info(get_label(raw, getattr(file, 'name', 'uploaded file')))
     result = parse_usfm(raw)
     if "errors" in result:
         st.write("Errors in USFM file:")

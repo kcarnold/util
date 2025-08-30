@@ -6,13 +6,15 @@
 #     "rich",
 # ]
 # ///
-from rich import print as rprint
-import sqlite3
-from pathlib import Path
-from collections import defaultdict
+import difflib
 import json
+import sqlite3
+from collections import defaultdict
+from pathlib import Path
 from typing import Dict, List
+
 from lxml import etree
+from rich import print as rprint
 
 expected_main_media_id = '"b0a6c8b2-ea84-4d21-a2fd-a31ddd00412b"'
 expected_greenscreen_media_id = '"aadb60bc-6e4f-4e56-bff9-325b0f26dd0a"'
@@ -149,6 +151,7 @@ def validate_songlyrics(content):
         warn(title, f"Expected green-screen media ID {expected_greenscreen_media_id}, found {content.get('slideOutput:1:MediaId')}")
 
 
+
 def validate_plaintext(content, key):
     assert key in content, f"Missing {key} in {title}"
     main_content = decode_richtextXML(content[key])
@@ -162,12 +165,61 @@ def validate_plaintext(content, key):
     translation_key = f'slideOutput:{translation_screen_idx-1}:RichTextXml'
     if translation_key not in content:
         warn(title, f"Missing translation")
+        look_for_prior_occurrences(main_content)
         return
     translation_content = decode_richtextXML(content[translation_key])
     main_slides = split_into_sections(main_content)
     translation_slides = split_into_sections(translation_content)
     assert_translation_ok(main_slides, translation_slides)
 
+
+def look_for_prior_occurrences(text):
+    """
+    Search all ServiceItems of kind 'Content' in all presentations since 2024-01-01
+    for content with high overlap to the given text (after decoding richtextXML, lowercasing, and normalizing whitespace).
+    Print the 2 highest-overlap items (presentation date, item title, first 100 chars), unless both ratios are < 0.5.
+    """
+    # Normalize input text
+    def normalize(s):
+        return ' '.join(s.lower().split())
+
+    norm_text = normalize(text)
+
+    # Use a single SQL query with a join
+    rows = conn.execute(
+        '''
+        SELECT Presentations.DateGiven, ServiceItems.Title, ServiceItems.Content
+        FROM ServiceItems
+        JOIN Presentations ON ServiceItems.PresentationId = Presentations.PresentationId
+        WHERE ServiceItems.ServiceItemKind = 'Content'
+          AND Presentations.DateGiven > "2024-01-01"
+          AND Presentations.Title NOT LIKE "INCORRECT%"
+        ''').fetchall()
+
+    matches = []
+    for date_given, item_title, content_json in rows:
+        try:
+            content = json.loads(content_json)
+            if '_richtextfield:Main Content' not in content:
+                continue
+            item_text = decode_richtextXML(content['_richtextfield:Main Content'])
+            norm_item_text = normalize(item_text)
+            ratio = difflib.SequenceMatcher(None, norm_text, norm_item_text).ratio()
+            matches.append((ratio, date_given, item_title, item_text))
+        except Exception:
+            continue
+
+    # Sort by ratio descending
+    matches.sort(reverse=True, key=lambda x: x[0])
+    # Only keep matches with ratio >= 0.5
+    top_matches = [m for m in matches if m[0] >= 0.5][:2]
+    if not top_matches:
+        return
+    rprint("[bold yellow]Prior similar Content items:[/bold yellow]")
+    for ratio, date_given, item_title, item_text in top_matches:
+        snippet = item_text.strip().replace('\n', ' ')[:100]
+        rprint(f"[dim]{date_given}[/dim] [bold]{item_title}[/bold] (similarity: {ratio:.2f}): {snippet}")
+    return
 
 def validate_biblepassage(content):
     validate_plaintext(content, key="_richtextfield:Passage")
@@ -258,5 +310,5 @@ conn.close()
 
 
 # Make a table of all of the song lyrics items
-import pandas as pd
-pd.DataFrame(song_item_data).to_csv('song_lyrics.csv', index=False)
+#import pandas as pd
+#pd.DataFrame(song_item_data).to_csv('song_lyrics.csv', index=False)

@@ -1,0 +1,582 @@
+[
+  {
+    "Identifier": "GEN",
+    "English Name": "Genesis",
+    "Notes": "‘1 Moses’ in some Bibles"
+  },
+  {
+    "Identifier": "EXO",
+    "English Name": "Exodus",
+    "Notes": "‘2 Moses’ in some Bibles"
+  },
+  {
+    "Identifier": "LEV",
+    "English Name": "Leviticus",
+    "Notes": "‘3 Moses’ in some Bibles"
+  },
+  {
+    "Identifier": "NUM",
+    "English Name": "Numbers",
+    "Notes": "‘4 Moses’ in some Bibles"
+  },
+  {
+    "Identifier": "DEU",
+    "English Name": "Deuteronomy",
+    "Notes": "‘5 Moses’ in some Bibles"
+  },
+  {
+    "Identifier": "JOS",
+    "English Name": "Joshua",
+    "Notes": ""
+  },
+  {
+    "Identifier": "JDG",
+    "English Name": "Judges",
+    "Notes": ""
+  },
+  {
+    "Identifier": "RUT",
+    "English Name": "Ruth",
+    "Notes": ""
+  },
+  {
+    "Identifier": "1SA",
+    "English Name": "1 Samuel",
+    "Notes": "1 Kings or Kingdoms in Orthodox Bibles; \ndo not confuse this abbreviation with \nISA for Isaiah"
+  },
+  {
+    "Identifier": "2SA",
+    "English Name": "2 Samuel",
+    "Notes": "2 Kings or Kingdoms in Orthodox Bibles"
+  },
+  {
+    "Identifier": "1KI",
+    "English Name": "1 Kings",
+    "Notes": "3 Kings or Kingdoms in Orthodox Bibles"
+  },
+  {
+    "Identifier": "2KI",
+    "English Name": "2 Kings",
+    "Notes": "4 Kings or Kingdoms in Orthodox Bibles"
+  },
+  {
+    "Identifier": "1CH",
+    "English Name": "1 Chronicles",
+    "Notes": "1 Paralipomenon in Orthodox Bibles"
+  },
+  {
+    "Identifier": "2CH",
+    "English Name": "2 Chronicles",
+    "Notes": "2 Paralipomenon in Orthodox Bibles"
+  },
+  {
+    "Identifier": "EZR",
+    "English Name": "Ezra",
+    "Notes": "This is for Hebrew Ezra, sometimes called \n1 Ezra or 1 Esdras; also for Ezra-Nehemiah \nwhen one book"
+  },
+  {
+    "Identifier": "NEH",
+    "English Name": "Nehemiah",
+    "Notes": "Sometimes appended to Ezra; called \n2 Esdras in the Vulgate"
+  },
+  {
+    "Identifier": "EST",
+    "English Name": "Esther (Hebrew)",
+    "Notes": "This is for Hebrew Esther; for the longer \nGreek LXX Esther use ESG"
+  },
+  {
+    "Identifier": "JOB",
+    "English Name": "Job",
+    "Notes": ""
+  },
+  {
+    "Identifier": "PSA",
+    "English Name": "Psalms",
+    "Notes": "150 Psalms in Hebrew, 151 Psalms in \nOrthodox Bibles, 155 Psalms in West \nSyriac Bibles, if you put Psalm 151 \nseparately in an Apocrypha use PS2, \nfor Psalms 152-155 use PS3"
+  },
+  {
+    "Identifier": "PRO",
+    "English Name": "Proverbs",
+    "Notes": "31 Proverbs, but 24 Proverbs in the \nEthiopian Bible"
+  },
+  {
+    "Identifier": "ECC",
+    "English Name": "Ecclesiastes",
+    "Notes": "Qoholeth in Catholic Bibles; for \nEcclesiasticus use SIR"
+  },
+  {
+    "Identifier": "SNG",
+    "English Name": "Song of Songs",
+    "Notes": "Song of Solomon, or Canticles of Canticles in \nCatholic Bibles"
+  },
+  {
+    "Identifier": "ISA",
+    "English Name": "Isaiah",
+    "Notes": "Do not confuse this abbreviation with 1SA \nfor 1 Samuel"
+  },
+  {
+    "Identifier": "JER",
+    "English Name": "Jeremiah",
+    "Notes": "The Book of Jeremiah; for the Letter of \nJeremiah use LJE"
+  },
+  {
+    "Identifier": "LAM",
+    "English Name": "Lamentations",
+    "Notes": "The Lamentations of Jeremiah"
+  },
+  {
+    "Identifier": "EZK",
+    "English Name": "Ezekiel",
+    "Notes": ""
+  },
+  {
+    "Identifier": "DAN",
+    "English Name": "Daniel (Hebrew)",
+    "Notes": "This is for Hebrew Daniel; for the longer \nGreek LXX Daniel use DAG"
+  },
+  {
+    "Identifier": "HOS",
+    "English Name": "Hosea",
+    "Notes": ""
+  },
+  {
+    "Identifier": "JOL",
+    "English Name": "Joel",
+    "Notes": ""
+  },
+  {
+    "Identifier": "AMO",
+    "English Name": "Amos",
+    "Notes": ""
+  },
+  {
+    "Identifier": "OBA",
+    "English Name": "Obadiah",
+    "Notes": ""
+  },
+  {
+    "Identifier": "JON",
+    "English Name": "Jonah",
+    "Notes": "Do not confuse this abbreviation with JHN \nfor John"
+  },
+  {
+    "Identifier": "MIC",
+    "English Name": "Micah",
+    "Notes": ""
+  },
+  {
+    "Identifier": "NAM",
+    "English Name": "Nahum",
+    "Notes": ""
+  },
+  {
+    "Identifier": "HAB",
+    "English Name": "Habakkuk",
+    "Notes": ""
+  },
+  {
+    "Identifier": "ZEP",
+    "English Name": "Zephaniah",
+    "Notes": ""
+  },
+  {
+    "Identifier": "HAG",
+    "English Name": "Haggai",
+    "Notes": ""
+  },
+  {
+    "Identifier": "ZEC",
+    "English Name": "Zechariah",
+    "Notes": ""
+  },
+  {
+    "Identifier": "MAL",
+    "English Name": "Malachi",
+    "Notes": ""
+  },
+  {
+    "Identifier": "MAT",
+    "English Name": "Matthew",
+    "Notes": "The Gospel according to Matthew"
+  },
+  {
+    "Identifier": "MRK",
+    "English Name": "Mark",
+    "Notes": "The Gospel according to Mark"
+  },
+  {
+    "Identifier": "LUK",
+    "English Name": "Luke",
+    "Notes": "The Gospel according to Luke"
+  },
+  {
+    "Identifier": "JHN",
+    "English Name": "John",
+    "Notes": "The Gospel according to John"
+  },
+  {
+    "Identifier": "ACT",
+    "English Name": "Acts",
+    "Notes": "The Acts of the Apostles"
+  },
+  {
+    "Identifier": "ROM",
+    "English Name": "Romans",
+    "Notes": "The Letter of Paul to the Romans"
+  },
+  {
+    "Identifier": "1CO",
+    "English Name": "1 Corinthians",
+    "Notes": "The First Letter of Paul to the Corinthians"
+  },
+  {
+    "Identifier": "2CO",
+    "English Name": "2 Corinthians",
+    "Notes": "The Second Letter of Paul to the Corinthians"
+  },
+  {
+    "Identifier": "GAL",
+    "English Name": "Galatians",
+    "Notes": "The Letter of Paul to the Galatians"
+  },
+  {
+    "Identifier": "EPH",
+    "English Name": "Ephesians",
+    "Notes": "The Letter of Paul to the Ephesians"
+  },
+  {
+    "Identifier": "PHP",
+    "English Name": "Philippians",
+    "Notes": "The Letter of Paul to the Philippians"
+  },
+  {
+    "Identifier": "COL",
+    "English Name": "Colossians",
+    "Notes": "The Letter of Paul to the Colossians"
+  },
+  {
+    "Identifier": "1TH",
+    "English Name": "1 Thessalonians",
+    "Notes": "The First Letter of Paul to the Thessalonians"
+  },
+  {
+    "Identifier": "2TH",
+    "English Name": "2 Thessalonians",
+    "Notes": "The Second Letter of Paul to the \nThessalonians"
+  },
+  {
+    "Identifier": "1TI",
+    "English Name": "1 Timothy",
+    "Notes": "The First Letter of Paul to Timothy"
+  },
+  {
+    "Identifier": "2TI",
+    "English Name": "2 Timothy",
+    "Notes": "The Second Letter of Paul to Timothy"
+  },
+  {
+    "Identifier": "TIT",
+    "English Name": "Titus",
+    "Notes": "The Letter of Paul to Titus"
+  },
+  {
+    "Identifier": "PHM",
+    "English Name": "Philemon",
+    "Notes": "The Letter of Paul to Philemon"
+  },
+  {
+    "Identifier": "HEB",
+    "English Name": "Hebrews",
+    "Notes": "The Letter to the Hebrews"
+  },
+  {
+    "Identifier": "JAS",
+    "English Name": "James",
+    "Notes": "The Letter of James"
+  },
+  {
+    "Identifier": "1PE",
+    "English Name": "1 Peter",
+    "Notes": "The First Letter of Peter"
+  },
+  {
+    "Identifier": "2PE",
+    "English Name": "2 Peter",
+    "Notes": "The Second Letter of Peter"
+  },
+  {
+    "Identifier": "1JN",
+    "English Name": "1 John",
+    "Notes": "The First Letter of John"
+  },
+  {
+    "Identifier": "2JN",
+    "English Name": "2 John",
+    "Notes": "The Second Letter of John"
+  },
+  {
+    "Identifier": "3JN",
+    "English Name": "3 John",
+    "Notes": "The Third Letter of John"
+  },
+  {
+    "Identifier": "JUD",
+    "English Name": "Jude",
+    "Notes": "The Letter of Jude; do not confuse this \nabbreviation with JDG for Judges, or \nJDT for Judith"
+  },
+  {
+    "Identifier": "REV",
+    "English Name": "Revelation",
+    "Notes": "The Revelation to John; called Apocalypse in \nCatholic Bibles"
+  },
+  {
+    "Identifier": "TOB",
+    "English Name": "Tobit",
+    "Notes": ""
+  },
+  {
+    "Identifier": "JDT",
+    "English Name": "Judith",
+    "Notes": ""
+  },
+  {
+    "Identifier": "ESG",
+    "English Name": "Esther Greek",
+    "Notes": ""
+  },
+  {
+    "Identifier": "WIS",
+    "English Name": "Wisdom of Solomon",
+    "Notes": ""
+  },
+  {
+    "Identifier": "SIR",
+    "English Name": "Sirach",
+    "Notes": "Ecclesiasticus or Jesus son of Sirach"
+  },
+  {
+    "Identifier": "BAR",
+    "English Name": "Baruch",
+    "Notes": "5 chapters in Orthodox Bibles (LJE is \nseparate); 6 chapters in Catholic Bibles \n(includes LJE); called 1 Baruch in Syriac \nBibles"
+  },
+  {
+    "Identifier": "LJE",
+    "English Name": "Letter of Jeremiah",
+    "Notes": "Sometimes included in Baruch; called ‘Rest \nof Jeremiah’ in Ethiopia"
+  },
+  {
+    "Identifier": "S3Y",
+    "English Name": "Song of the 3 Young Men",
+    "Notes": "Includes the Prayer of Azariah; sometimes \nincluded in Greek Daniel"
+  },
+  {
+    "Identifier": "SUS",
+    "English Name": "Susanna",
+    "Notes": "Sometimes included in Greek Daniel"
+  },
+  {
+    "Identifier": "BEL",
+    "English Name": "Bel and the Dragon",
+    "Notes": "Sometimes included in Greek Daniel; called \n‘Rest of Daniel’ in Ethiopia"
+  },
+  {
+    "Identifier": "1MA",
+    "English Name": "1 Maccabees",
+    "Notes": "Called ‘3 Maccabees’ in some traditions, \nprinted in Catholic and Orthodox Bibles"
+  },
+  {
+    "Identifier": "2MA",
+    "English Name": "2 Maccabees",
+    "Notes": "Called ‘1 Maccabees’ in some traditions, \nprinted in Catholic and Orthodox Bibles"
+  },
+  {
+    "Identifier": "3MA",
+    "English Name": "3 Maccabees",
+    "Notes": "Called ‘2 Maccabees’ in some traditions, \nprinted in Orthodox Bibles"
+  },
+  {
+    "Identifier": "4MA",
+    "English Name": "4 Maccabees",
+    "Notes": "In an appendix to the Greek Bible and in the \nGeorgian Bible"
+  },
+  {
+    "Identifier": "1ES",
+    "English Name": "1 Esdras (Greek)",
+    "Notes": "The 9 chapter book of Greek Ezra in the LXX, \ncalled ‘2 Esdras’ in Russian Bibles, \nand called ‘3 Esdras’ in the Vulgate; \nwhen Ezra-Nehemiah is one book use EZR"
+  },
+  {
+    "Identifier": "2ES",
+    "English Name": "2 Esdras (Latin)",
+    "Notes": "The 16 chapter book of Latin Esdras called \n‘3 Esdras’ in Russian Bibles and called \n‘4 Esdras’ in the Vulgate; for the 12 chapter \nApocalypse of Ezra use EZA"
+  },
+  {
+    "Identifier": "MAN",
+    "English Name": "Prayer of Manasseh",
+    "Notes": "Sometimes appended to 2 Chronicles, \nincluded in Orthodox Bibles"
+  },
+  {
+    "Identifier": "PS2",
+    "English Name": "Psalm 151",
+    "Notes": "An additional Psalm in the Septuagint, \nappended to Psalms in Orthodox Bibles"
+  },
+  {
+    "Identifier": "ODA",
+    "English Name": "Odae/Odes",
+    "Notes": "A book in some editions of the Septuagint; \nOdes has different contents in Greek, \nRussian, and Syriac traditions"
+  },
+  {
+    "Identifier": "PSS",
+    "English Name": "Psalms of Solomon",
+    "Notes": "A book in some editions of the Septuagint, \nbut not printed in modern Bibles"
+  },
+  {
+    "Identifier": "EZA",
+    "English Name": "Ezra Apocalypse",
+    "Notes": "12 chapter book of Ezra Apocalypse; called \n‘3 Ezra’ in the Armenian Bible, called \n‘Ezra Shealtiel’ in the Ethiopian Bible; \nformerly called 4ES; called ‘2 Esdras’ when \nit includes 5 Ezra and 6 Ezra"
+  },
+  {
+    "Identifier": "5EZ",
+    "English Name": "5 Ezra",
+    "Notes": "2 chapter Latin preface to Ezra Apocalypse; \nformerly called 5ES"
+  },
+  {
+    "Identifier": "6EZ",
+    "English Name": "6 Ezra",
+    "Notes": "2 chapter Latin conclusion to Ezra \nApocalypse; formerly called 6ES"
+  },
+  {
+    "Identifier": "DAG",
+    "English Name": "Daniel Greek",
+    "Notes": "The 14 chapter version of Daniel from the \nSeptuagint including Greek additions"
+  },
+  {
+    "Identifier": "PS3",
+    "English Name": "Psalms 152-155",
+    "Notes": "Additional Psalms 152-155 found in West \nSyriac manuscripts"
+  },
+  {
+    "Identifier": "2BA",
+    "English Name": "2 Baruch (Apocalypse)",
+    "Notes": "The Apocalypse of Baruch in Syriac Bibles"
+  },
+  {
+    "Identifier": "LBA",
+    "English Name": "Letter of Baruch",
+    "Notes": "Sometimes appended to 2 Baruch; \nsometimes separate in Syriac Bibles"
+  },
+  {
+    "Identifier": "JUB",
+    "English Name": "Jubilees",
+    "Notes": "Ancient Hebrew book used in the Ethiopian \nBible"
+  },
+  {
+    "Identifier": "ENO",
+    "English Name": "Enoch",
+    "Notes": "Sometimes called ‘1 Enoch’; ancient Hebrew \nbook in the Ethiopian Bible"
+  },
+  {
+    "Identifier": "1MQ",
+    "English Name": "1 Meqabyan/Mekabis",
+    "Notes": "Book of Mekabis of Benjamin in the \nEthiopian Bible"
+  },
+  {
+    "Identifier": "2MQ",
+    "English Name": "2 Meqabyan/Mekabis",
+    "Notes": "Book of Mekabis of Moab in the Ethiopian \nBible"
+  },
+  {
+    "Identifier": "3MQ",
+    "English Name": "3 Meqabyan/Mekabis",
+    "Notes": "Book of Meqabyan in the Ethiopian Bible"
+  },
+  {
+    "Identifier": "REP",
+    "English Name": "Reproof",
+    "Notes": "Proverbs part 2: Used in the Ethiopian Bible"
+  },
+  {
+    "Identifier": "4BA",
+    "English Name": "4 Baruch",
+    "Notes": "Paralipomenon of Jeremiah, called ‘Rest of \nthe Words of Baruch’ in Ethiopia; may \ninclude or exclude the Letter of Jeremiah \nas chapter 1, used in the Ethiopian Bible"
+  },
+  {
+    "Identifier": "LAO",
+    "English Name": "Letter to the Laodiceans",
+    "Notes": "A Latin Vulgate book, found in the Vulgate \nand some medieval Catholic translations"
+  },
+  {
+    "Identifier": "FRT",
+    "English Name": "Front Matter",
+    "Notes": ""
+  },
+  {
+    "Identifier": "BAK",
+    "English Name": "Back Matter",
+    "Notes": ""
+  },
+  {
+    "Identifier": "OTH",
+    "English Name": "Other Matter",
+    "Notes": ""
+  },
+  {
+    "Identifier": "INT",
+    "English Name": "Introduction Matter",
+    "Notes": ""
+  },
+  {
+    "Identifier": "CNC",
+    "English Name": "Concordance",
+    "Notes": ""
+  },
+  {
+    "Identifier": "GLO",
+    "English Name": "Glossary / Wordlist",
+    "Notes": ""
+  },
+  {
+    "Identifier": "TDX",
+    "English Name": "Topical Index",
+    "Notes": ""
+  },
+  {
+    "Identifier": "NDX",
+    "English Name": "Names Index",
+    "Notes": ""
+  },
+  {
+    "Identifier": "XXA",
+    "English Name": "Extra material",
+    "Notes": ""
+  },
+  {
+    "Identifier": "XXB",
+    "English Name": "Extra material",
+    "Notes": ""
+  },
+  {
+    "Identifier": "XXC",
+    "English Name": "Extra material",
+    "Notes": ""
+  },
+  {
+    "Identifier": "XXD",
+    "English Name": "Extra material",
+    "Notes": ""
+  },
+  {
+    "Identifier": "XXE",
+    "English Name": "Extra material",
+    "Notes": ""
+  },
+  {
+    "Identifier": "XXF",
+    "English Name": "Extra material",
+    "Notes": ""
+  },
+  {
+    "Identifier": "XXG",
+    "English Name": "Extra material",
+    "Notes": ""
+  }
+]

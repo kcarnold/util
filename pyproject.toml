@@ -14,3 +14,4 @@ dependencies = [
 [project.scripts]
 validate_proclaim = "validate_proclaim:main"
 extract_usfm = "extract_usfm:main"
+extract_verses = "usfm_processor:main"

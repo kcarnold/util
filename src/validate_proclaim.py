@@ -218,10 +218,11 @@ def look_for_prior_occurrences(text):
     rprint("[bold yellow]Prior similar Content items:[/bold yellow]")
     for ratio, date_given, item_title, item_text in top_matches:
         snippet = item_text.strip().replace('\n', ' ')[:100]
-        rprint(f"[dim]{date_given}[/dim] [bold]{item_title}[/bold] (similarity: {ratio:.2f}): {snippet}")
+        rprint(f"[bold]{date_given}[/bold] [dim]{item_title}[/dim] (similarity: {ratio:.2f}): {snippet}")
     return
 
 def validate_biblepassage(content):
+    print(content.get('_textfield:BibleReference'))
     validate_plaintext(content, key="_richtextfield:Passage")
 
 

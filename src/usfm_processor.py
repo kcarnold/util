@@ -493,34 +493,10 @@ def extract_verses(zipfile_path: str, ref: str) -> str:
     return '\n--\n'.join(all_verse_lines)
 
 
-def main():
+def main() -> None:
     """Main entry point for the extract_verses command-line tool."""
     import sys
-    
-    if len(sys.argv) != 3:
-        print("Usage: extract_verses <zipfile> <verse_reference>", file=sys.stderr)
-        print("Examples:", file=sys.stderr)
-        print("  extract_verses bible.zip 'Psalm 153:2'", file=sys.stderr)
-        print("  extract_verses bible.zip 'Matthew 1:18-20'", file=sys.stderr)
-        print("  extract_verses bible.zip 'Jude 3'", file=sys.stderr)
-        print("  extract_verses bible.zip 'Exodus 15:1-2,11-15'", file=sys.stderr)
-        print("  extract_verses bible.zip 'Exodus 15:29-16:2'", file=sys.stderr)
-        sys.exit(1)
-    
-    zipfile_path = sys.argv[1]
-    verse_ref = sys.argv[2]
-    
-    try:
-        result = extract_verses(zipfile_path, verse_ref)
-        print(result)
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
 
-
-if __name__ == '__main__':
-    import sys
-    
     if len(sys.argv) != 3:
         print("Usage: python usfm_processor.py <zipfile> <verse_reference>", file=sys.stderr)
         print("Examples:", file=sys.stderr)
@@ -530,13 +506,17 @@ if __name__ == '__main__':
         print("  python usfm_processor.py bible.zip 'Exodus 15:1-2,11-15'", file=sys.stderr)
         print("  python usfm_processor.py bible.zip 'Exodus 15:29-16:2'", file=sys.stderr)
         sys.exit(1)
-    
+
     zipfile_path = sys.argv[1]
     verse_ref = sys.argv[2]
-    
+
     try:
         result = extract_verses(zipfile_path, verse_ref)
         print(result)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

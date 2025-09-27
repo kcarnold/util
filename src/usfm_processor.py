@@ -159,28 +159,85 @@ def load_book_abbreviations() -> Dict[str, str]:
     return name_to_id
 
 
-def parse_verse_reference(ref: str) -> Tuple[str, Optional[str], str, Optional[str]]:
-    """Parse a verse reference into (book, chapter, start_verse, end_verse).
-    
+def parse_single_verse_reference(ref: str) -> Tuple[str, Optional[str], str, Optional[str]]:
+    """Parse a single verse reference into (book, chapter, start_verse, end_verse).
+
     Supports formats like:
     - "Psalm 153:2" -> ("Psalm", "153", "2", None)
     - "Matthew 1:18-20" -> ("Matthew", "1", "18", "20")
     - "Jude 3" -> ("Jude", None, "3", None)
+    - "Exodus 15:29-16:2" -> ("Exodus", "15", "29", "16:2") for cross-chapter ranges
     """
     ref = ref.replace('–', '-')  # Normalize dash characters
+
+    # First try to match cross-chapter range: "Book 15:29-16:2"
+    cross_chapter_pattern = r'^([A-Za-z0-9\s]+?)\s+(\d+):(\d+)-(\d+):(\d+)$'
+    match = re.match(cross_chapter_pattern, ref.strip())
+    if match:
+        book_name = match.group(1).strip()
+        start_chapter = match.group(2)
+        start_verse = match.group(3)
+        end_chapter = match.group(4)
+        end_verse = match.group(5)
+        return book_name, start_chapter, start_verse, f"{end_chapter}:{end_verse}"
+
     # Pattern to match book name followed by optional chapter:verse or just verse
     pattern = r'^([A-Za-z0-9\s]+?)\s+(?:(\d+):)?(\d+)(?:-(\d+))?$'
     match = re.match(pattern, ref.strip())
-    
+
     if not match:
         raise ValueError(f"Invalid verse reference format: {ref}")
-    
+
     book_name = match.group(1).strip()
     chapter = match.group(2)  # Could be None for single-chapter books
     start_verse = match.group(3)
     end_verse = match.group(4)  # Could be None for single verse
-    
+
     return book_name, chapter, start_verse, end_verse
+
+
+def parse_verse_reference(ref: str) -> List[Tuple[str, Optional[str], str, Optional[str]]]:
+    """Parse a verse reference into a list of (book, chapter, start_verse, end_verse) tuples.
+
+    Supports formats like:
+    - "Psalm 153:2" -> [("Psalm", "153", "2", None)]
+    - "Matthew 1:18-20" -> [("Matthew", "1", "18", "20")]
+    - "Exodus 15:1-2,11-15" -> [("Exodus", "15", "1", "2"), ("Exodus", "15", "11", "15")]
+    - "Exodus 15:29-16:2" -> [("Exodus", "15", "29", "16:2")]
+    """
+    ref = ref.strip()
+
+    # Handle comma-separated references
+    if ',' in ref:
+        parts = [part.strip() for part in ref.split(',')]
+        results = []
+        base_book = None
+        base_chapter = None
+
+        for i, part in enumerate(parts):
+            if i == 0:
+                # First part should have full book and chapter
+                parsed = parse_single_verse_reference(part)
+                base_book, base_chapter = parsed[0], parsed[1]
+                results.append(parsed)
+            else:
+                # Subsequent parts might be just verse ranges
+                if ':' not in part and base_book and base_chapter:
+                    # Just verse range, use base book and chapter
+                    full_ref = f"{base_book} {base_chapter}:{part}"
+                    results.append(parse_single_verse_reference(full_ref))
+                else:
+                    # Full reference or chapter:verse
+                    if not any(char.isalpha() for char in part):
+                        # No book name, use base book
+                        full_ref = f"{base_book} {part}"
+                        results.append(parse_single_verse_reference(full_ref))
+                    else:
+                        results.append(parse_single_verse_reference(part))
+        return results
+    else:
+        # Single reference
+        return [parse_single_verse_reference(ref)]
 
 
 def find_book_in_usfm_files(book_name: str, file_contents: Dict[str, str], name_to_id: Dict[str, str]) -> str:
@@ -200,106 +257,184 @@ def find_book_in_usfm_files(book_name: str, file_contents: Dict[str, str], name_
 
 
 def extract_verses_from_usj(usj: Dict[str, Any], chapter: Optional[str], start_verse: str, end_verse: Optional[str]) -> List[str]:
-    """Extract specific verses from a USJ structure."""
+    """Extract specific verses from a USJ structure.
+
+    Handles both single-chapter ranges and cross-chapter ranges.
+    For cross-chapter ranges, end_verse should be in format "chapter:verse" (e.g., "16:2").
+    """
     usj_content = usj['content']
-    
-    # If no chapter specified, assume single-chapter book (chapter "1")
-    target_chapter = chapter or "1"
-    
-    # Convert verse numbers to integers for range comparison
-    start_verse_num = int(start_verse)
-    end_verse_num = int(end_verse) if end_verse else start_verse_num
-    
-    if start_verse_num > end_verse_num:
-        raise ValueError(f"Start verse {start_verse_num} is greater than end verse {end_verse_num}")
-    
-    # Navigate through USJ to find the target chapter and verses
-    cur_chapter = None
-    cur_verse = None
-    verse_texts = {}  # verse_num -> text content
-    collecting = False
-    
-    for item in usj_content:
-        if isinstance(item, dict):
-            if item['type'] == 'chapter':
-                cur_chapter = item['number']
-                collecting = (cur_chapter == target_chapter)
-            elif item['type'] == 'verse' and collecting:
-                cur_verse = item['number']
-                # Initialize verse text if we're in the target range
+
+    # Check if this is a cross-chapter range
+    is_cross_chapter = end_verse and ':' in end_verse
+
+    if is_cross_chapter:
+        # Parse cross-chapter range
+        assert end_verse is not None  # We know this from is_cross_chapter check
+        end_chapter, end_verse_str = end_verse.split(':')
+        start_chapter = chapter or "1"
+        start_verse_num = int(start_verse)
+        end_verse_num = int(end_verse_str)
+
+        # Collect verses across multiple chapters
+        verse_texts = {}  # (chapter, verse) -> text content
+        cur_chapter = None
+        cur_verse = None
+
+        for item in usj_content:
+            if isinstance(item, dict):
+                if item['type'] == 'chapter':
+                    cur_chapter = item['number']
+                elif item['type'] == 'verse':
+                    cur_verse = item['number']
+                    # Check if this verse is in our range
+                    chapter_num = int(cur_chapter) if cur_chapter else 1
+                    verse_num = int(cur_verse)
+                    start_ch_num = int(start_chapter)
+                    end_ch_num = int(end_chapter)
+
+                    in_range = False
+                    if chapter_num == start_ch_num and chapter_num == end_ch_num:
+                        # Same chapter range
+                        in_range = start_verse_num <= verse_num <= end_verse_num
+                    elif chapter_num == start_ch_num:
+                        # Start chapter
+                        in_range = verse_num >= start_verse_num
+                    elif chapter_num == end_ch_num:
+                        # End chapter
+                        in_range = verse_num <= end_verse_num
+                    elif start_ch_num < chapter_num < end_ch_num:
+                        # Middle chapter
+                        in_range = True
+
+                    if in_range:
+                        verse_texts[(chapter_num, verse_num)] = ""
+                elif cur_chapter and cur_verse:
+                    # This is text content
+                    chapter_num = int(cur_chapter)
+                    verse_num = int(cur_verse)
+                    if (chapter_num, verse_num) in verse_texts:
+                        if isinstance(item, str):
+                            verse_texts[(chapter_num, verse_num)] += item
+                        elif 'text' in item:
+                            verse_texts[(chapter_num, verse_num)] += item['text']
+            elif isinstance(item, str) and cur_chapter and cur_verse:
+                # Plain text content
+                chapter_num = int(cur_chapter)
+                verse_num = int(cur_verse)
+                if (chapter_num, verse_num) in verse_texts:
+                    verse_texts[(chapter_num, verse_num)] += item
+
+        # Return verses in order with chapter:verse format
+        result = []
+        for (ch_num, v_num) in sorted(verse_texts.keys()):
+            text = verse_texts[(ch_num, v_num)].strip()
+            result.append(f"{ch_num}:{v_num} {text}")
+
+        return result
+
+    else:
+        # Single chapter range (original logic)
+        target_chapter = chapter or "1"
+
+        # Convert verse numbers to integers for range comparison
+        start_verse_num = int(start_verse)
+        end_verse_num = int(end_verse) if end_verse else start_verse_num
+
+        if start_verse_num > end_verse_num:
+            raise ValueError(f"Start verse {start_verse_num} is greater than end verse {end_verse_num}")
+
+        # Navigate through USJ to find the target chapter and verses
+        cur_chapter = None
+        cur_verse = None
+        verse_texts = {}  # verse_num -> text content
+        collecting = False
+
+        for item in usj_content:
+            if isinstance(item, dict):
+                if item['type'] == 'chapter':
+                    cur_chapter = item['number']
+                    collecting = (cur_chapter == target_chapter)
+                elif item['type'] == 'verse' and collecting:
+                    cur_verse = item['number']
+                    # Initialize verse text if we're in the target range
+                    verse_num = int(cur_verse)
+                    if start_verse_num <= verse_num <= end_verse_num:
+                        verse_texts[verse_num] = ""
+                elif collecting and cur_verse:
+                    # This is text content
+                    verse_num = int(cur_verse)
+                    if start_verse_num <= verse_num <= end_verse_num:
+                        if isinstance(item, str):
+                            verse_texts[verse_num] = verse_texts.get(verse_num, "") + item
+                        elif 'text' in item:
+                            verse_texts[verse_num] = verse_texts.get(verse_num, "") + item['text']
+            elif isinstance(item, str) and collecting and cur_verse:
+                # Plain text content
                 verse_num = int(cur_verse)
                 if start_verse_num <= verse_num <= end_verse_num:
-                    verse_texts[verse_num] = ""
-            elif collecting and cur_verse:
-                # This is text content
-                verse_num = int(cur_verse)
-                if start_verse_num <= verse_num <= end_verse_num:
-                    if isinstance(item, str):
-                        verse_texts[verse_num] = verse_texts.get(verse_num, "") + item
-                    elif 'text' in item:
-                        verse_texts[verse_num] = verse_texts.get(verse_num, "") + item['text']
-        elif isinstance(item, str) and collecting and cur_verse:
-            # Plain text content
-            verse_num = int(cur_verse)
-            if start_verse_num <= verse_num <= end_verse_num:
-                verse_texts[verse_num] = verse_texts.get(verse_num, "") + item
-    
-    # Verify we found all requested verses
-    missing_verses = []
-    for verse_num in range(start_verse_num, end_verse_num + 1):
-        if verse_num not in verse_texts:
-            missing_verses.append(str(verse_num))
-    
-    if missing_verses:
-        raise ValueError(f"Verses not found: {', '.join(missing_verses)} in chapter {target_chapter}")
-    
-    # Return verses in order with verse numbers
-    result = []
-    for verse_num in range(start_verse_num, end_verse_num + 1):
-        text = verse_texts[verse_num].strip()
-        result.append(f"{verse_num} {text}")
-    
-    return result
+                    verse_texts[verse_num] = verse_texts.get(verse_num, "") + item
+
+        # Verify we found all requested verses
+        missing_verses = []
+        for verse_num in range(start_verse_num, end_verse_num + 1):
+            if verse_num not in verse_texts:
+                missing_verses.append(str(verse_num))
+
+        if missing_verses:
+            raise ValueError(f"Verses not found: {', '.join(missing_verses)} in chapter {target_chapter}")
+
+        # Return verses in order with verse numbers
+        result = []
+        for verse_num in range(start_verse_num, end_verse_num + 1):
+            text = verse_texts[verse_num].strip()
+            result.append(f"{verse_num} {text}")
+
+        return result
 
 
 def extract_verses(zipfile_path: str, ref: str) -> str:
     """Extract verses from a USFM zip file based on a verse reference.
-    
+
     Args:
         zipfile_path: Path to the ZIP file containing USFM files
-        ref: Verse reference like "Psalm 153:2", "Matthew 1:18-20", or "Jude 3"
-    
+        ref: Verse reference like "Psalm 153:2", "Matthew 1:18-20", "Jude 3",
+             "Exodus 15:1-2,11-15", or "Exodus 15:29-16:2"
+
     Returns:
         Formatted string with verse numbers and text
     """
     # Load the book abbreviations
     name_to_id = load_book_abbreviations()
-    
+
     # Read the zip file
     with open(zipfile_path, 'rb') as f:
         zip_data = f.read()
-    
+
     # Extract USFM files
     file_contents = extract_usfm_files_from_zip(zip_data)
-    
-    # Parse the verse reference
-    book_name, chapter, start_verse, end_verse = parse_verse_reference(ref)
-    
-    # Find the appropriate USFM file
-    filename = find_book_in_usfm_files(book_name, file_contents, name_to_id)
-    usfm_content = file_contents[filename]
-    
-    # Parse the USFM content
-    parsed = parse_usfm(usfm_content)
-    if 'errors' in parsed:
-        raise ValueError(f"USFM parsing errors: {parsed['errors']}")
-    
-    usj = parsed['usj']
-    
-    # Extract the requested verses
-    verse_lines = extract_verses_from_usj(usj, chapter, start_verse, end_verse)
-    
-    return '\n--\n'.join(verse_lines)
+
+    # Parse the verse reference(s)
+    parsed_refs = parse_verse_reference(ref)
+
+    all_verse_lines = []
+
+    for book_name, chapter, start_verse, end_verse in parsed_refs:
+        # Find the appropriate USFM file
+        filename = find_book_in_usfm_files(book_name, file_contents, name_to_id)
+        usfm_content = file_contents[filename]
+
+        # Parse the USFM content
+        parsed = parse_usfm(usfm_content)
+        if 'errors' in parsed:
+            raise ValueError(f"USFM parsing errors: {parsed['errors']}")
+
+        usj = parsed['usj']
+
+        # Extract the requested verses
+        verse_lines = extract_verses_from_usj(usj, chapter, start_verse, end_verse)
+        all_verse_lines.extend(verse_lines)
+
+    return '\n--\n'.join(all_verse_lines)
 
 
 def main():
@@ -312,6 +447,8 @@ def main():
         print("  extract_verses bible.zip 'Psalm 153:2'", file=sys.stderr)
         print("  extract_verses bible.zip 'Matthew 1:18-20'", file=sys.stderr)
         print("  extract_verses bible.zip 'Jude 3'", file=sys.stderr)
+        print("  extract_verses bible.zip 'Exodus 15:1-2,11-15'", file=sys.stderr)
+        print("  extract_verses bible.zip 'Exodus 15:29-16:2'", file=sys.stderr)
         sys.exit(1)
     
     zipfile_path = sys.argv[1]
@@ -334,6 +471,8 @@ if __name__ == '__main__':
         print("  python usfm_processor.py bible.zip 'Psalm 153:2'", file=sys.stderr)
         print("  python usfm_processor.py bible.zip 'Matthew 1:18-20'", file=sys.stderr)
         print("  python usfm_processor.py bible.zip 'Jude 3'", file=sys.stderr)
+        print("  python usfm_processor.py bible.zip 'Exodus 15:1-2,11-15'", file=sys.stderr)
+        print("  python usfm_processor.py bible.zip 'Exodus 15:29-16:2'", file=sys.stderr)
         sys.exit(1)
     
     zipfile_path = sys.argv[1]

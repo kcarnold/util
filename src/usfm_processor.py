@@ -167,6 +167,7 @@ def parse_verse_reference(ref: str) -> Tuple[str, Optional[str], str, Optional[s
     - "Matthew 1:18-20" -> ("Matthew", "1", "18", "20")
     - "Jude 3" -> ("Jude", None, "3", None)
     """
+    ref = ref.replace('–', '-')  # Normalize dash characters
     # Pattern to match book name followed by optional chapter:verse or just verse
     pattern = r'^([A-Za-z0-9\s]+?)\s+(?:(\d+):)?(\d+)(?:-(\d+))?$'
     match = re.match(pattern, ref.strip())

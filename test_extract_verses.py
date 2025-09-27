@@ -14,15 +14,15 @@ def test_parse_verse_reference():
     """Test the verse reference parsing function."""
     print("Testing verse reference parsing...")
     
-    # Test cases
+    # Test cases (expecting lists since parse_verse_reference returns a list)
     test_cases = [
-        ("Psalm 153:2", ("Psalm", "153", "2", None)),
-        ("Matthew 1:18-20", ("Matthew", "1", "18", "20")),
-        ("Jude 3", ("Jude", None, "3", None)),
-        ("1 Samuel 17:4", ("1 Samuel", "17", "4", None)),
-        ("2 Corinthians 5:17-21", ("2 Corinthians", "5", "17", "21")),
+        ("Psalm 153:2", [("Psalm", "153", "2", None)]),
+        ("Matthew 1:18-20", [("Matthew", "1", "18", "20")]),
+        ("Jude 3", [("Jude", None, "3", None)]),
+        ("1 Samuel 17:4", [("1 Samuel", "17", "4", None)]),
+        ("2 Corinthians 5:17-21", [("2 Corinthians", "5", "17", "21")]),
     ]
-    
+
     for ref, expected in test_cases:
         try:
             result = parse_verse_reference(ref)

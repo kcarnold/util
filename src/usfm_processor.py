@@ -165,7 +165,8 @@ def parse_single_verse_reference(ref: str) -> Tuple[str, Optional[str], str, Opt
     Supports formats like:
     - "Psalm 153:2" -> ("Psalm", "153", "2", None)
     - "Matthew 1:18-20" -> ("Matthew", "1", "18", "20")
-    - "Jude 3" -> ("Jude", None, "3", None)
+    - "Matthew 6" -> ("Matthew", "6", "1", None) for entire chapter
+    - "Jude 3" -> ("Jude", None, "3", None) for single-chapter books
     - "Exodus 15:29-16:2" -> ("Exodus", "15", "29", "16:2") for cross-chapter ranges
     """
     ref = ref.replace('–', '-')  # Normalize dash characters
@@ -181,19 +182,36 @@ def parse_single_verse_reference(ref: str) -> Tuple[str, Optional[str], str, Opt
         end_verse = match.group(5)
         return book_name, start_chapter, start_verse, f"{end_chapter}:{end_verse}"
 
-    # Pattern to match book name followed by optional chapter:verse or just verse
-    pattern = r'^([A-Za-z0-9\s]+?)\s+(?:(\d+):)?(\d+)(?:-(\d+))?$'
-    match = re.match(pattern, ref.strip())
+    # Try to match chapter:verse format first
+    chapter_verse_pattern = r'^([A-Za-z0-9\s]+?)\s+(\d+):(\d+)(?:-(\d+))?$'
+    match = re.match(chapter_verse_pattern, ref.strip())
+    if match:
+        book_name = match.group(1).strip()
+        chapter = match.group(2)
+        start_verse = match.group(3)
+        end_verse = match.group(4)  # Could be None for single verse
+        return book_name, chapter, start_verse, end_verse
 
-    if not match:
-        raise ValueError(f"Invalid verse reference format: {ref}")
+    # Try to match just book and single number
+    single_number_pattern = r'^([A-Za-z0-9\s]+?)\s+(\d+)$'
+    match = re.match(single_number_pattern, ref.strip())
+    if match:
+        book_name = match.group(1).strip()
+        number = match.group(2)
 
-    book_name = match.group(1).strip()
-    chapter = match.group(2)  # Could be None for single-chapter books
-    start_verse = match.group(3)
-    end_verse = match.group(4)  # Could be None for single verse
+        # Check if this is a single-chapter book
+        single_chapter_books = {
+            'obadiah', 'philemon', 'jude', '2 john', '3 john'
+        }
 
-    return book_name, chapter, start_verse, end_verse
+        if book_name.lower() in single_chapter_books:
+            # For single-chapter books, the number is the verse
+            return book_name, None, number, None
+        else:
+            # For multi-chapter books, the number is the chapter (return entire chapter)
+            return book_name, number, "1", None
+
+    raise ValueError(f"Invalid verse reference format: {ref}")
 
 
 def parse_verse_reference(ref: str) -> List[Tuple[str, Optional[str], str, Optional[str]]]:
@@ -336,60 +354,98 @@ def extract_verses_from_usj(usj: Dict[str, Any], chapter: Optional[str], start_v
         # Single chapter range (original logic)
         target_chapter = chapter or "1"
 
-        # Convert verse numbers to integers for range comparison
-        start_verse_num = int(start_verse)
-        end_verse_num = int(end_verse) if end_verse else start_verse_num
+        # Handle entire chapter request (start_verse="1" and end_verse=None)
+        if start_verse == "1" and end_verse is None:
+            # Collect all verses in the chapter
+            cur_chapter = None
+            cur_verse = None
+            verse_texts = {}  # verse_num -> text content
+            collecting = False
 
-        if start_verse_num > end_verse_num:
-            raise ValueError(f"Start verse {start_verse_num} is greater than end verse {end_verse_num}")
-
-        # Navigate through USJ to find the target chapter and verses
-        cur_chapter = None
-        cur_verse = None
-        verse_texts = {}  # verse_num -> text content
-        collecting = False
-
-        for item in usj_content:
-            if isinstance(item, dict):
-                if item['type'] == 'chapter':
-                    cur_chapter = item['number']
-                    collecting = (cur_chapter == target_chapter)
-                elif item['type'] == 'verse' and collecting:
-                    cur_verse = item['number']
-                    # Initialize verse text if we're in the target range
-                    verse_num = int(cur_verse)
-                    if start_verse_num <= verse_num <= end_verse_num:
+            for item in usj_content:
+                if isinstance(item, dict):
+                    if item['type'] == 'chapter':
+                        cur_chapter = item['number']
+                        collecting = (cur_chapter == target_chapter)
+                    elif item['type'] == 'verse' and collecting:
+                        cur_verse = item['number']
+                        verse_num = int(cur_verse)
                         verse_texts[verse_num] = ""
-                elif collecting and cur_verse:
-                    # This is text content
-                    verse_num = int(cur_verse)
-                    if start_verse_num <= verse_num <= end_verse_num:
+                    elif collecting and cur_verse:
+                        # This is text content
+                        verse_num = int(cur_verse)
                         if isinstance(item, str):
                             verse_texts[verse_num] = verse_texts.get(verse_num, "") + item
                         elif 'text' in item:
                             verse_texts[verse_num] = verse_texts.get(verse_num, "") + item['text']
-            elif isinstance(item, str) and collecting and cur_verse:
-                # Plain text content
-                verse_num = int(cur_verse)
-                if start_verse_num <= verse_num <= end_verse_num:
+                elif isinstance(item, str) and collecting and cur_verse:
+                    # Plain text content
+                    verse_num = int(cur_verse)
                     verse_texts[verse_num] = verse_texts.get(verse_num, "") + item
 
-        # Verify we found all requested verses
-        missing_verses = []
-        for verse_num in range(start_verse_num, end_verse_num + 1):
-            if verse_num not in verse_texts:
-                missing_verses.append(str(verse_num))
+            # Return all verses found in the chapter
+            result = []
+            for verse_num in sorted(verse_texts.keys()):
+                text = verse_texts[verse_num].strip()
+                result.append(f"{verse_num} {text}")
 
-        if missing_verses:
-            raise ValueError(f"Verses not found: {', '.join(missing_verses)} in chapter {target_chapter}")
+            return result
 
-        # Return verses in order with verse numbers
-        result = []
-        for verse_num in range(start_verse_num, end_verse_num + 1):
-            text = verse_texts[verse_num].strip()
-            result.append(f"{verse_num} {text}")
+        else:
+            # Handle specific verse range
+            start_verse_num = int(start_verse)
+            end_verse_num = int(end_verse) if end_verse else start_verse_num
 
-        return result
+            if start_verse_num > end_verse_num:
+                raise ValueError(f"Start verse {start_verse_num} is greater than end verse {end_verse_num}")
+
+            # Navigate through USJ to find the target chapter and verses
+            cur_chapter = None
+            cur_verse = None
+            verse_texts = {}  # verse_num -> text content
+            collecting = False
+
+            for item in usj_content:
+                if isinstance(item, dict):
+                    if item['type'] == 'chapter':
+                        cur_chapter = item['number']
+                        collecting = (cur_chapter == target_chapter)
+                    elif item['type'] == 'verse' and collecting:
+                        cur_verse = item['number']
+                        # Initialize verse text if we're in the target range
+                        verse_num = int(cur_verse)
+                        if start_verse_num <= verse_num <= end_verse_num:
+                            verse_texts[verse_num] = ""
+                    elif collecting and cur_verse:
+                        # This is text content
+                        verse_num = int(cur_verse)
+                        if start_verse_num <= verse_num <= end_verse_num:
+                            if isinstance(item, str):
+                                verse_texts[verse_num] = verse_texts.get(verse_num, "") + item
+                            elif 'text' in item:
+                                verse_texts[verse_num] = verse_texts.get(verse_num, "") + item['text']
+                elif isinstance(item, str) and collecting and cur_verse:
+                    # Plain text content
+                    verse_num = int(cur_verse)
+                    if start_verse_num <= verse_num <= end_verse_num:
+                        verse_texts[verse_num] = verse_texts.get(verse_num, "") + item
+
+            # Verify we found all requested verses
+            missing_verses = []
+            for verse_num in range(start_verse_num, end_verse_num + 1):
+                if verse_num not in verse_texts:
+                    missing_verses.append(str(verse_num))
+
+            if missing_verses:
+                raise ValueError(f"Verses not found: {', '.join(missing_verses)} in chapter {target_chapter}")
+
+            # Return verses in order with verse numbers
+            result = []
+            for verse_num in range(start_verse_num, end_verse_num + 1):
+                text = verse_texts[verse_num].strip()
+                result.append(f"{verse_num} {text}")
+
+            return result
 
 
 def extract_verses(zipfile_path: str, ref: str) -> str:

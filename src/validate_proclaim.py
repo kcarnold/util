@@ -406,6 +406,28 @@ def look_for_prior_occurrences(text):
         rprint(f"[bold]{date_given}[/bold] [dim]{item_title}[/dim] (similarity: {ratio:.2f}): {snippet}")
     return
 
+def validate_biblepassage_functional(title: str, content: dict, greenscreen_screen_idx: Optional[int], translation_screen_idx: int, conn) -> ValidationResult:
+    """Validate Bible passage content functionally."""
+    result = ValidationResult(item_type="BiblePassage", title=title)
+
+    bible_ref = content.get('_textfield:BibleReference')
+    if bible_ref:
+        result.add_info(f"Bible reference: {bible_ref}")
+    else:
+        result.add_warning("Missing Bible reference")
+
+    # Validate the passage content using the plaintext validation
+    passage_result = validate_plaintext_functional(title, content, "_richtextfield:Passage", greenscreen_screen_idx, translation_screen_idx, conn)
+
+    # Merge the results
+    result.warnings.extend(passage_result.warnings)
+    result.info.extend(passage_result.info)
+    result.debug.extend(passage_result.debug)
+    result.prior_matches = passage_result.prior_matches
+
+    return result
+
+
 def validate_biblepassage(content):
     print(content.get('_textfield:BibleReference'))
     validate_plaintext(content, key="_richtextfield:Passage")

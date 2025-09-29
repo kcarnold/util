@@ -459,6 +459,7 @@ class ProclaimValidator:
         if not self.conn:
             self.connect()
 
+        assert self.conn is not None
         presentations = self.conn.execute(
             '''
             SELECT
@@ -502,6 +503,7 @@ class ProclaimValidator:
         if not self.conn:
             self.connect()
 
+        assert self.conn is not None
         # Get presentation info
         presentation_row = self.conn.execute(
             '''

@@ -101,6 +101,50 @@ def warn(item_name, message):
     rprint(f"[bold red]***Warning***[/bold red]: {item_name}: {message}")
 
 
+def look_for_prior_occurrences_functional(text, conn) -> List[Dict[str, Any]]:
+    """
+    Search all ServiceItems of kind 'Content' in all presentations since 2024-01-01
+    for content with high overlap to the given text (after decoding richtextXML, lowercasing, and normalizing whitespace).
+    Return the 2 highest-overlap items (presentation date, item title, first 100 chars), unless both ratios are < 0.5.
+    """
+    def normalize(s):
+        return ' '.join(s.lower().split())
+
+    norm_text = normalize(text)
+
+    rows = conn.execute(
+        '''
+        SELECT p.DateGiven, si.Title, si.Content
+        FROM ServiceItems si
+        JOIN Presentations p ON si.PresentationId = p.PresentationId
+        WHERE si.ServiceItemKind = 'Content'
+          AND p.DateGiven > "2024-01-01"
+        ''').fetchall()
+
+    matches = []
+    for date_given, item_title, content_json in rows:
+        try:
+            content = json.loads(content_json)
+            if '_richtextfield:Main Content' not in content:
+                continue
+            item_text = decode_richtextXML(content['_richtextfield:Main Content'])
+            norm_item_text = normalize(item_text)
+            ratio = difflib.SequenceMatcher(None, norm_text, norm_item_text).ratio()
+            matches.append({
+                'ratio': ratio,
+                'date_given': date_given,
+                'title': item_title,
+                'text': item_text,
+                'snippet': item_text.strip().replace('\n', ' ')[:100]
+            })
+        except Exception:
+            continue
+
+    # Sort by ratio descending and keep only matches with ratio >= 0.5
+    matches.sort(reverse=True, key=lambda x: x['ratio'])
+    return [m for m in matches if m['ratio'] >= 0.5][:2]
+
+
 def split_into_sections(text):
     """Split the text into sections based on blank lines or --."""
     sections = ['']

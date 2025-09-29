@@ -433,6 +433,137 @@ def validate_biblepassage(content):
     validate_plaintext(content, key="_richtextfield:Passage")
 
 
+class ProclaimValidator:
+    """Class to handle database connections and presentation validation."""
+
+    def __init__(self, db_path: Optional[str] = None):
+        if db_path is None:
+            proclaim_data = Path('~/Library/Application Support/Proclaim/Data/5sos6hqf.xyd/').expanduser()
+            db_path = proclaim_data / 'PresentationManager' / 'PresentationManager.db'
+        self.db_path = db_path
+        self.conn = None
+
+    def connect(self):
+        """Connect to the Proclaim database."""
+        self.conn = sqlite3.connect(self.db_path)
+
+    def disconnect(self):
+        """Disconnect from the database."""
+        if self.conn:
+            self.conn.close()
+            self.conn = None
+
+    def get_presentations(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get recent presentations."""
+        if not self.conn:
+            self.connect()
+
+        presentations = self.conn.execute(
+            '''
+            SELECT
+                PresentationId, DateGiven, Title, Content
+                FROM Presentations
+                WHERE DateGiven > "2024-01-01" AND Title NOT LIKE "INCORRECT%"
+                ORDER BY DateGiven DESC
+                LIMIT ?
+            ;''', (limit,)).fetchall()
+
+        return [
+            {
+                'id': row[0],
+                'date_given': row[1],
+                'title': row[2],
+                'content': json.loads(row[3])
+            }
+            for row in presentations
+        ]
+
+    def get_virtual_screens(self, presentation_content: dict) -> List[Dict[str, Any]]:
+        """Get virtual screens for a presentation."""
+        virtual_screens = json.loads(presentation_content.get('VirtualScreens', '[]'))
+        return [screen for screen in virtual_screens if screen['outputKind'] in ["Slides", "SlidesAlternateContent"]]
+
+    def get_screen_indices(self, presentation_content: dict) -> tuple[Optional[int], int]:
+        """Get greenscreen and translation screen indices."""
+        virtual_screens = self.get_virtual_screens(presentation_content)
+
+        greenscreen_screen_idx = next((i for i, screen in enumerate(virtual_screens) if screen['name'] == 'Green Screen'), None)
+
+        # Find translation screen
+        translation_screen_idx = [i for i, screen in enumerate(virtual_screens) if any(lang in screen['name'] for lang in ['French', 'Haitian'])]
+        if len(translation_screen_idx) != 1:
+            raise ValueError(f"Expected one translation screen, found {len(translation_screen_idx)}")
+
+        return greenscreen_screen_idx, translation_screen_idx[0]
+
+    def validate_presentation(self, presentation_id: str) -> PresentationValidation:
+        """Validate a single presentation by ID."""
+        if not self.conn:
+            self.connect()
+
+        # Get presentation info
+        presentation_row = self.conn.execute(
+            '''
+            SELECT PresentationId, DateGiven, Title, Content
+            FROM Presentations
+            WHERE PresentationId = ?
+            ''', (presentation_id,)).fetchone()
+
+        if not presentation_row:
+            raise ValueError(f"Presentation {presentation_id} not found")
+
+        pres_id, date_given, title, content_json = presentation_row
+        presentation_content = json.loads(content_json)
+
+        result = PresentationValidation(
+            presentation_id=pres_id,
+            title=title,
+            date_given=date_given
+        )
+
+        try:
+            greenscreen_screen_idx, translation_screen_idx = self.get_screen_indices(presentation_content)
+        except ValueError as e:
+            # If we can't determine screen indices, create a warning item
+            error_result = ValidationResult(item_type="Configuration", title="Screen Configuration")
+            error_result.add_warning(str(e))
+            result.add_item(error_result)
+            return result
+
+        # Get all service items for this presentation
+        service_items = self.conn.execute(
+            '''
+            SELECT Title, Content, ServiceItemKind
+            FROM ServiceItems
+            WHERE PresentationId = ?
+            ''', (presentation_id,)).fetchall()
+
+        for item_title, content_json, item_kind in service_items:
+            # Skip certain items
+            if item_title.lower() in ['blank', 'ncf slide', 'offering slide']:
+                continue
+
+            content = json.loads(content_json)
+
+            if item_kind == "SongLyrics":
+                item_result = validate_songlyrics_functional(item_title, content)
+            elif item_kind == "Content":
+                item_result = validate_plaintext_functional(item_title, content, "_richtextfield:Main Content", greenscreen_screen_idx, translation_screen_idx, self.conn)
+            elif item_kind == "BiblePassage":
+                item_result = validate_biblepassage_functional(item_title, content, greenscreen_screen_idx, translation_screen_idx, self.conn)
+            elif item_kind in ["Grouping", "ImageSlideshow"]:
+                # Skip these item types
+                continue
+            else:
+                # Unknown item kind
+                item_result = ValidationResult(item_type=item_kind, title=item_title)
+                item_result.add_warning(f"Unknown item kind: {item_kind}")
+
+            result.add_item(item_result)
+
+        return result
+
+
 import argparse
 
 # One optional argument: index of the presentation to validate (0 for most recent, 1 for second most recent, etc.)

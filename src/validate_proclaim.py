@@ -11,10 +11,57 @@ import json
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional, Any
+from dataclasses import dataclass, field
+import argparse
+import tkinter as tk
+from tkinter import ttk, scrolledtext, messagebox
+import threading
 
 from lxml import etree
 from rich import print as rprint
+
+
+@dataclass
+class ValidationResult:
+    """Result of validating a single item."""
+    item_type: str
+    title: str
+    warnings: List[str] = field(default_factory=list)
+    info: List[str] = field(default_factory=list)
+    debug: List[str] = field(default_factory=list)
+    prior_matches: List[Dict[str, Any]] = field(default_factory=list)
+
+    def add_warning(self, message: str):
+        self.warnings.append(message)
+
+    def add_info(self, message: str):
+        self.info.append(message)
+
+    def add_debug(self, message: str):
+        self.debug.append(message)
+
+    def has_issues(self) -> bool:
+        return bool(self.warnings)
+
+
+@dataclass
+class PresentationValidation:
+    """Result of validating an entire presentation."""
+    presentation_id: str
+    title: str
+    date_given: str
+    items: List[ValidationResult] = field(default_factory=list)
+
+    def add_item(self, item: ValidationResult):
+        self.items.append(item)
+
+    def get_items_with_issues(self) -> List[ValidationResult]:
+        return [item for item in self.items if item.has_issues()]
+
+    def has_any_issues(self) -> bool:
+        return any(item.has_issues() for item in self.items)
+
 
 expected_main_media_id = '"b0a6c8b2-ea84-4d21-a2fd-a31ddd00412b"'
 expected_greenscreen_media_id = '"aadb60bc-6e4f-4e56-bff9-325b0f26dd0a"'

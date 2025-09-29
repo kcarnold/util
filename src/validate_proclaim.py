@@ -290,6 +290,53 @@ def validate_songlyrics(content):
 
 
 
+def validate_plaintext_functional(title: str, content: dict, key: str, greenscreen_screen_idx: Optional[int], translation_screen_idx: int, conn) -> ValidationResult:
+    """Validate plaintext content items functionally."""
+    result = ValidationResult(item_type="Content", title=title)
+
+    if key not in content:
+        result.add_warning(f"Missing {key}")
+        return result
+
+    main_content = decode_richtextXML(content[key])
+    if main_content.strip() == '':
+        # image-only slide
+        result.add_info("Image-only slide")
+        return result
+
+    if greenscreen_screen_idx is not None:
+        greenscreen_key = f'slideOutput:{greenscreen_screen_idx-1}:RichTextXml'
+        if greenscreen_key in content:
+            result.add_warning("Unexpected greenscreen content")
+
+    translation_key = f'slideOutput:{translation_screen_idx-1}:RichTextXml'
+    if translation_key not in content:
+        result.add_warning("Missing translation")
+        # Look for prior occurrences
+        prior_matches = look_for_prior_occurrences_functional(main_content, conn)
+        result.prior_matches = prior_matches
+        if prior_matches:
+            result.add_info(f"Found {len(prior_matches)} similar prior items")
+        return result
+
+    translation_content = decode_richtextXML(content[translation_key])
+    main_slides = split_into_sections(main_content)
+    translation_slides = split_into_sections(translation_content)
+
+    # Check slide alignment
+    if main_slides == translation_slides:
+        result.add_warning("Original and translation slides are identical")
+    elif len(main_slides) != len(translation_slides):
+        result.add_warning(f"Number of slides in original ({len(main_slides)}) and translation ({len(translation_slides)}) do not match")
+        result.add_debug("Slide comparison:")
+        for i in range(max(len(main_slides), len(translation_slides))):
+            original_slide = main_slides[i] if i < len(main_slides) else ''
+            translation_slide = translation_slides[i] if i < len(translation_slides) else ''
+            result.add_debug(f"Slide {i:>2d}: {get_first_line(original_slide):>50} | {get_first_line(translation_slide):50}")
+
+    return result
+
+
 def validate_plaintext(content, key):
     assert key in content, f"Missing {key} in {title}"
     main_content = decode_richtextXML(content[key])

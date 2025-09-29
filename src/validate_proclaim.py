@@ -622,12 +622,16 @@ class ValidateProclaimGUI:
         """Refresh the list of presentations."""
         def refresh_thread():
             try:
-                self.set_status("Loading presentations...")
-                self.validator.connect()
-                self.presentations = self.validator.get_presentations(20)
+                self.root.after(0, lambda: self.set_status("Loading presentations..."))
+
+                # Create a new validator instance for this thread
+                thread_validator = ProclaimValidator()
+                thread_validator.connect()
+                presentations = thread_validator.get_presentations(20)
+                thread_validator.disconnect()
 
                 # Update combo box on main thread
-                self.root.after(0, self.update_presentation_combo)
+                self.root.after(0, lambda: self.update_presentation_combo_with_data(presentations))
             except Exception as e:
                 error_msg = f"Error loading presentations: {e}"
                 self.root.after(0, lambda: self.set_status(error_msg))
@@ -636,9 +640,10 @@ class ValidateProclaimGUI:
         # Run in background thread
         threading.Thread(target=refresh_thread, daemon=True).start()
 
-    def update_presentation_combo(self):
+    def update_presentation_combo_with_data(self, presentations):
         """Update the presentation combo box with loaded presentations."""
         try:
+            self.presentations = presentations
             combo_values = [f"{p['date_given']} - {p['title']}" for p in self.presentations]
             self.presentation_combo['values'] = combo_values
             if combo_values:
@@ -669,11 +674,14 @@ class ValidateProclaimGUI:
                 self.root.after(0, lambda: self.set_status("Validating presentation..."))
                 self.root.after(0, lambda: self.clear_results())
 
-                # Perform validation
-                validation_result = self.validator.validate_presentation(selected_presentation['id'])
-                self.current_validation = validation_result
+                # Create a new validator instance for this thread
+                thread_validator = ProclaimValidator()
+                thread_validator.connect()
+                validation_result = thread_validator.validate_presentation(selected_presentation['id'])
+                thread_validator.disconnect()
 
-                # Display results on main thread
+                # Store result and display on main thread
+                self.current_validation = validation_result
                 self.root.after(0, lambda: self.display_results(validation_result))
                 self.root.after(0, lambda: self.set_status("Validation complete"))
 

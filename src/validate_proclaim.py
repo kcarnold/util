@@ -752,10 +752,17 @@ class ValidateProclaimGUI:
 
 import argparse
 
-# One optional argument: index of the presentation to validate (0 for most recent, 1 for second most recent, etc.)
+# Command line arguments
 parser = argparse.ArgumentParser(description='Validate Proclaim presentations.')
 parser.add_argument('-i', '--index', type=int, default=0, help='Index of the presentation to validate (default: 0 for most recent)')
+parser.add_argument('--gui', action='store_true', help='Launch the GUI instead of CLI validation')
 args = parser.parse_args()
+
+if args.gui:
+    # Launch GUI
+    app = ValidateProclaimGUI()
+    app.run()
+    exit()
 
 
 # Connect to the Proclaim database

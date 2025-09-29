@@ -567,6 +567,189 @@ class ProclaimValidator:
         return result
 
 
+class ValidateProclaimGUI:
+    """Tkinter GUI for Proclaim presentation validation."""
+
+    def __init__(self):
+        self.validator = ProclaimValidator()
+        self.root = tk.Tk()
+        self.root.title("Proclaim Presentation Validator")
+        self.root.geometry("1000x700")
+
+        self.setup_ui()
+        self.presentations = []
+        self.current_validation = None
+
+    def setup_ui(self):
+        """Set up the user interface."""
+        # Main frame
+        main_frame = ttk.Frame(self.root)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Top frame for presentation selection and refresh
+        top_frame = ttk.Frame(main_frame)
+        top_frame.pack(fill=tk.X, pady=(0, 10))
+
+        # Presentation selection
+        ttk.Label(top_frame, text="Presentation:").pack(side=tk.LEFT)
+        self.presentation_var = tk.StringVar()
+        self.presentation_combo = ttk.Combobox(top_frame, textvariable=self.presentation_var, state="readonly", width=50)
+        self.presentation_combo.pack(side=tk.LEFT, padx=(5, 10))
+        self.presentation_combo.bind('<<ComboboxSelected>>', self.on_presentation_selected)
+
+        # Refresh button
+        self.refresh_btn = ttk.Button(top_frame, text="Refresh", command=self.refresh_presentations)
+        self.refresh_btn.pack(side=tk.LEFT)
+
+        # Validate button
+        self.validate_btn = ttk.Button(top_frame, text="Validate", command=self.validate_selected_presentation)
+        self.validate_btn.pack(side=tk.LEFT, padx=(5, 0))
+
+        # Status label
+        self.status_var = tk.StringVar(value="Ready")
+        status_label = ttk.Label(top_frame, textvariable=self.status_var)
+        status_label.pack(side=tk.RIGHT)
+
+        # Results area
+        results_frame = ttk.LabelFrame(main_frame, text="Validation Results")
+        results_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Create scrolled text widget for results
+        self.results_text = scrolledtext.ScrolledText(results_frame, wrap=tk.WORD, font=('Courier', 10))
+        self.results_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+    def refresh_presentations(self):
+        """Refresh the list of presentations."""
+        def refresh_thread():
+            try:
+                self.set_status("Loading presentations...")
+                self.validator.connect()
+                self.presentations = self.validator.get_presentations(20)
+
+                # Update combo box on main thread
+                self.root.after(0, self.update_presentation_combo)
+            except Exception as e:
+                error_msg = f"Error loading presentations: {e}"
+                self.root.after(0, lambda: self.set_status(error_msg))
+                self.root.after(0, lambda: messagebox.showerror("Error", error_msg))
+
+        # Run in background thread
+        threading.Thread(target=refresh_thread, daemon=True).start()
+
+    def update_presentation_combo(self):
+        """Update the presentation combo box with loaded presentations."""
+        try:
+            combo_values = [f"{p['date_given']} - {p['title']}" for p in self.presentations]
+            self.presentation_combo['values'] = combo_values
+            if combo_values:
+                self.presentation_combo.current(0)
+            self.set_status(f"Loaded {len(self.presentations)} presentations")
+        except Exception as e:
+            self.set_status(f"Error updating combo: {e}")
+
+    def on_presentation_selected(self, event=None):
+        """Handle presentation selection."""
+        pass  # We'll validate on button click instead
+
+    def validate_selected_presentation(self):
+        """Validate the currently selected presentation."""
+        if not self.presentations:
+            messagebox.showwarning("Warning", "No presentations loaded. Please refresh first.")
+            return
+
+        selected_index = self.presentation_combo.current()
+        if selected_index < 0:
+            messagebox.showwarning("Warning", "Please select a presentation.")
+            return
+
+        selected_presentation = self.presentations[selected_index]
+
+        def validate_thread():
+            try:
+                self.root.after(0, lambda: self.set_status("Validating presentation..."))
+                self.root.after(0, lambda: self.clear_results())
+
+                # Perform validation
+                validation_result = self.validator.validate_presentation(selected_presentation['id'])
+                self.current_validation = validation_result
+
+                # Display results on main thread
+                self.root.after(0, lambda: self.display_results(validation_result))
+                self.root.after(0, lambda: self.set_status("Validation complete"))
+
+            except Exception as e:
+                error_msg = f"Error validating presentation: {e}"
+                self.root.after(0, lambda: self.set_status(error_msg))
+                self.root.after(0, lambda: messagebox.showerror("Validation Error", error_msg))
+
+        # Run validation in background thread
+        threading.Thread(target=validate_thread, daemon=True).start()
+
+    def display_results(self, validation: PresentationValidation):
+        """Display validation results in the text widget."""
+        self.clear_results()
+
+        # Header
+        self.append_result(f"Presentation: {validation.title}")
+        self.append_result(f"Date: {validation.date_given}")
+        self.append_result(f"ID: {validation.presentation_id}")
+        self.append_result("=" * 80)
+
+        # Summary
+        items_with_issues = validation.get_items_with_issues()
+        total_items = len(validation.items)
+        self.append_result(f"Total items: {total_items}")
+        self.append_result(f"Items with issues: {len(items_with_issues)}")
+
+        if not items_with_issues:
+            self.append_result("\n✅ No issues found!")
+            return
+
+        self.append_result(f"\n⚠️  Found issues in {len(items_with_issues)} items:")
+
+        # Details for each item with issues
+        for item in items_with_issues:
+            self.append_result(f"\n--- {item.item_type}: {item.title} ---")
+
+            if item.warnings:
+                for warning in item.warnings:
+                    self.append_result(f"  ⚠️  {warning}")
+
+            if item.info:
+                for info in item.info:
+                    self.append_result(f"  ℹ️  {info}")
+
+            if item.prior_matches:
+                self.append_result("  📋 Similar prior items:")
+                for match in item.prior_matches:
+                    self.append_result(f"    • {match['date_given']} - {match['title']} (similarity: {match['ratio']:.2f})")
+                    self.append_result(f"      {match['snippet']}")
+
+            if item.debug:
+                self.append_result("  🔍 Debug info:")
+                for debug in item.debug:
+                    self.append_result(f"    {debug}")
+
+    def append_result(self, text: str):
+        """Append text to the results area."""
+        self.results_text.insert(tk.END, text + "\n")
+        self.results_text.see(tk.END)
+
+    def clear_results(self):
+        """Clear the results area."""
+        self.results_text.delete(1.0, tk.END)
+
+    def set_status(self, message: str):
+        """Set the status message."""
+        self.status_var.set(message)
+
+    def run(self):
+        """Start the GUI application."""
+        # Load presentations on startup
+        self.refresh_presentations()
+        self.root.mainloop()
+
+
 import argparse
 
 # One optional argument: index of the presentation to validate (0 for most recent, 1 for second most recent, etc.)

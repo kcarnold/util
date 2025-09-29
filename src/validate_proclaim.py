@@ -215,6 +215,53 @@ def assert_translation_ok(original_slides, translation_slides):
         print(f"Slide {i:>2d}: {get_first_line(original_slide):>50} | {get_first_line(translation_slide):50}")
 
 
+def validate_songlyrics_functional(title: str, content: dict) -> ValidationResult:
+    """Validate the SongLyrics item."""
+    result = ValidationResult(item_type="SongLyrics", title=title)
+
+    if not content.get('_richtextfield:Lyrics'):
+        result.add_warning(f"Missing _richtextfield:Lyrics")
+        return result
+
+    # check transitions
+    transition_info = (content.get('UseCustomTransition'), content.get('CustomTransitionKind'), content.get('CustomTransitionDuration'))
+    if transition_info != ('true', 'LyricScrolling', '0'):
+        result.add_warning(f"Unexpected transition info: {transition_info}")
+
+    # Find the translations output
+    translations = [key for key in content if key.startswith("slideOutput") and key.endswith("RichTextXml")]
+    if len(translations) != 1:
+        result.add_warning(f"Expected one translation, found {len(translations)}")
+        return result
+    translation_key = translations[0]
+
+    try:
+        original_slides = get_slides_for_song(content)
+        translation_slides = get_slides_for_song(content, translation_key)
+
+        # Check slide count match
+        if original_slides != translation_slides:
+            if len(original_slides) != len(translation_slides):
+                result.add_warning(f"Number of slides in original ({len(original_slides)}) and translation ({len(translation_slides)}) do not match")
+                result.add_debug("Slide comparison:")
+                for i in range(max(len(original_slides), len(translation_slides))):
+                    original_slide = original_slides[i] if i < len(original_slides) else ''
+                    translation_slide = translation_slides[i] if i < len(translation_slides) else ''
+                    result.add_debug(f"Slide {i:>2d}: {get_first_line(original_slide):>50} | {get_first_line(translation_slide):50}")
+        elif original_slides == translation_slides:
+            result.add_warning("Original and translation slides are identical")
+    except Exception as e:
+        result.add_warning(f"Error validating slides: {e}")
+
+    # Check media IDs
+    if content.get('slideOutput:0:MediaId') != expected_main_media_id:
+        result.add_warning(f"Expected main media ID {expected_main_media_id}, found {content.get('slideOutput:0:MediaId')}")
+    if content.get('slideOutput:1:MediaId') != expected_greenscreen_media_id:
+        result.add_warning(f"Expected green-screen media ID {expected_greenscreen_media_id}, found {content.get('slideOutput:1:MediaId')}")
+
+    return result
+
+
 def validate_songlyrics(content):
     """Validate the SongLyrics item."""
     assert content.get('_richtextfield:Lyrics'), f"Missing _richtextfield:Lyrics in {title}"
@@ -223,7 +270,7 @@ def validate_songlyrics(content):
     transition_info = (content.get('UseCustomTransition'), content.get('CustomTransitionKind'), content.get('CustomTransitionDuration'))
     if transition_info != ('true', 'LyricScrolling', '0'):
         warn(title, f"Unexpected transition info: {transition_info}")
-        
+
     # Find the translations output
     translations = [key for key in content if key.startswith("slideOutput") and key.endswith("RichTextXml")]
     if len(translations) != 1:

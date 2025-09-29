@@ -439,9 +439,10 @@ class ProclaimValidator:
     def __init__(self, db_path: Optional[str] = None):
         if db_path is None:
             proclaim_data = Path('~/Library/Application Support/Proclaim/Data/5sos6hqf.xyd/').expanduser()
-            db_path = proclaim_data / 'PresentationManager' / 'PresentationManager.db'
-        self.db_path = db_path
-        self.conn = None
+            self.db_path = str(proclaim_data / 'PresentationManager' / 'PresentationManager.db')
+        else:
+            self.db_path = db_path
+        self.conn: Optional[sqlite3.Connection] = None
 
     def connect(self):
         """Connect to the Proclaim database."""

@@ -188,7 +188,6 @@ def get_first_line(text):
 
 def get_slides_for_song(item, content_key=None) -> List[str]:
     """Get the slides for a given item."""
-    assert item_kind == "SongLyrics", f"Item kind is not SongLyrics: {item_kind}"
     if content_key is None:
         content_key = '_richtextfield:Lyrics'
     content = decode_richtextXML(item[content_key])

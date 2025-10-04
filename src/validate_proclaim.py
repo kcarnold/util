@@ -461,6 +461,7 @@ class ValidateProclaimGUI:
         self.setup_ui()
         self.presentations = []
         self.current_validation = None
+        self.validation_items = {}
 
     def setup_ui(self):
         """Set up the user interface."""
@@ -492,13 +493,42 @@ class ValidateProclaimGUI:
         status_label = ttk.Label(top_frame, textvariable=self.status_var)
         status_label.pack(side=tk.RIGHT)
 
-        # Results area
+        # Results area - PanedWindow with left (items list) and right (details) panes
         results_frame = ttk.LabelFrame(main_frame, text="Validation Results")
         results_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Create scrolled text widget for results
-        self.results_text = scrolledtext.ScrolledText(results_frame, wrap=tk.WORD, font=('Courier', 10))
-        self.results_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Create PanedWindow for two-pane layout
+        paned_window = ttk.PanedWindow(results_frame, orient=tk.HORIZONTAL)
+        paned_window.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Left pane: Items list with status
+        left_frame = ttk.Frame(paned_window)
+        paned_window.add(left_frame, weight=1)
+
+        # Create Treeview for items list
+        tree_scroll = ttk.Scrollbar(left_frame)
+        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.items_tree = ttk.Treeview(left_frame, columns=('status',), yscrollcommand=tree_scroll.set, selectmode='browse')
+        self.items_tree.pack(fill=tk.BOTH, expand=True)
+        tree_scroll.config(command=self.items_tree.yview)
+
+        # Configure columns
+        self.items_tree.heading('#0', text='Item')
+        self.items_tree.heading('status', text='Status')
+        self.items_tree.column('#0', width=300)
+        self.items_tree.column('status', width=200)
+
+        # Bind selection event
+        self.items_tree.bind('<<TreeviewSelect>>', self.on_item_selected)
+
+        # Right pane: Details for selected item
+        right_frame = ttk.Frame(paned_window)
+        paned_window.add(right_frame, weight=2)
+
+        # Details text widget
+        self.details_text = scrolledtext.ScrolledText(right_frame, wrap=tk.WORD, font=('Courier', 10))
+        self.details_text.pack(fill=tk.BOTH, expand=True)
 
     def refresh_presentations(self):
         """Refresh the list of presentations."""
@@ -538,6 +568,50 @@ class ValidateProclaimGUI:
         """Handle presentation selection."""
         pass  # We'll validate on button click instead
 
+    def on_item_selected(self, event=None):
+        """Handle item selection in the tree - show details in right pane."""
+        selection = self.items_tree.selection()
+        if not selection:
+            return
+
+        item_id = selection[0]
+        if item_id not in self.validation_items:
+            return
+
+        item = self.validation_items[item_id]
+
+        # Clear and update details pane
+        self.clear_details()
+
+        # Display item details
+        self.append_detail(f"{item.item_type}: {item.title}")
+        self.append_detail("=" * 60)
+
+        if not item.has_issues() and not item.info and not item.prior_matches and not item.debug:
+            self.append_detail("\n✅ No issues or information for this item.")
+            return
+
+        if item.warnings:
+            self.append_detail("\n⚠️  Warnings:")
+            for warning in item.warnings:
+                self.append_detail(f"  • {warning}")
+
+        if item.info:
+            self.append_detail("\nℹ️  Information:")
+            for info in item.info:
+                self.append_detail(f"  • {info}")
+
+        if item.prior_matches:
+            self.append_detail("\n📋 Similar prior items:")
+            for match in item.prior_matches:
+                self.append_detail(f"  • {match['date_given']} - {match['title']} (similarity: {match['ratio']:.2f})")
+                self.append_detail(f"    {match['snippet']}")
+
+        if item.debug:
+            self.append_detail("\n🔍 Debug info:")
+            for debug in item.debug:
+                self.append_detail(f"  {debug}")
+
     def validate_selected_presentation(self):
         """Validate the currently selected presentation."""
         if not self.presentations:
@@ -576,58 +650,53 @@ class ValidateProclaimGUI:
         threading.Thread(target=validate_thread, daemon=True).start()
 
     def display_results(self, validation: PresentationValidation):
-        """Display validation results in the text widget."""
+        """Display validation results in the tree and details panes."""
         self.clear_results()
 
-        # Header
-        self.append_result(f"Presentation: {validation.title}")
-        self.append_result(f"Date: {validation.date_given}")
-        self.append_result(f"ID: {validation.presentation_id}")
-        self.append_result("=" * 80)
+        # Store items for later reference
+        self.validation_items = {}
 
-        # Summary
-        items_with_issues = validation.get_items_with_issues()
-        total_items = len(validation.items)
-        self.append_result(f"Total items: {total_items}")
-        self.append_result(f"Items with issues: {len(items_with_issues)}")
+        # Show header in details pane
+        self.append_detail(f"Presentation: {validation.title}")
+        self.append_detail(f"Date: {validation.date_given}")
+        self.append_detail(f"ID: {validation.presentation_id}")
+        self.append_detail("=" * 80)
+        self.append_detail(f"\nTotal items: {len(validation.items)}")
+        self.append_detail(f"Items with issues: {len(validation.get_items_with_issues())}")
+        self.append_detail("\nSelect an item from the left pane to view details.\n")
 
-        if not items_with_issues:
-            self.append_result("\n✅ No issues found!")
-            return
+        # Populate tree with all items
+        for item in validation.items:
+            status_summary = self.get_status_summary(item)
+            item_label = f"{item.item_type}: {item.title}"
+            item_id = self.items_tree.insert('', 'end', text=item_label, values=(status_summary,))
+            # Store item reference by tree item ID
+            self.validation_items[item_id] = item
 
-        self.append_result(f"\n⚠️  Found issues in {len(items_with_issues)} items:")
+    def get_status_summary(self, item: ValidationResult) -> str:
+        """Get a short status summary for an item."""
+        if not item.has_issues():
+            return "✅ OK"
 
-        # Details for each item with issues
-        for item in items_with_issues:
-            self.append_result(f"\n--- {item.item_type}: {item.title} ---")
+        warning_count = len(item.warnings)
+        return f"⚠️  {warning_count} warning{'s' if warning_count != 1 else ''}"
 
-            if item.warnings:
-                for warning in item.warnings:
-                    self.append_result(f"  ⚠️  {warning}")
+    def append_detail(self, text: str):
+        """Append text to the details pane."""
+        self.details_text.insert(tk.END, text + "\n")
+        self.details_text.see(tk.END)
 
-            if item.info:
-                for info in item.info:
-                    self.append_result(f"  ℹ️  {info}")
-
-            if item.prior_matches:
-                self.append_result("  📋 Similar prior items:")
-                for match in item.prior_matches:
-                    self.append_result(f"    • {match['date_given']} - {match['title']} (similarity: {match['ratio']:.2f})")
-                    self.append_result(f"      {match['snippet']}")
-
-            if item.debug:
-                self.append_result("  🔍 Debug info:")
-                for debug in item.debug:
-                    self.append_result(f"    {debug}")
-
-    def append_result(self, text: str):
-        """Append text to the results area."""
-        self.results_text.insert(tk.END, text + "\n")
-        self.results_text.see(tk.END)
+    def clear_details(self):
+        """Clear the details pane."""
+        self.details_text.delete(1.0, tk.END)
 
     def clear_results(self):
-        """Clear the results area."""
-        self.results_text.delete(1.0, tk.END)
+        """Clear both tree and details panes."""
+        # Clear tree
+        for item in self.items_tree.get_children():
+            self.items_tree.delete(item)
+        # Clear details
+        self.clear_details()
 
     def set_status(self, message: str):
         """Set the status message."""

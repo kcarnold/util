@@ -101,7 +101,7 @@ def warn(item_name, message):
     rprint(f"[bold red]***Warning***[/bold red]: {item_name}: {message}")
 
 
-def look_for_prior_occurrences_functional(text, conn) -> List[Dict[str, Any]]:
+def look_for_prior_occurrences(text, conn) -> List[Dict[str, Any]]:
     """
     Search all ServiceItems of kind 'Content' in all presentations since 2024-01-01
     for content with high overlap to the given text (after decoding richtextXML, lowercasing, and normalizing whitespace).
@@ -200,21 +200,9 @@ def get_slides_for_song(item, content_key=None) -> List[str]:
     return split_into_sections(content)
 
 
-def assert_translation_ok(original_slides, translation_slides):
-    if original_slides == translation_slides:
-        warn(title, "Original and translation slides are identical")
-        return
-    if len(original_slides) == len(translation_slides):
-        return
-    warn(title, f"Number of slides in original ({len(original_slides)}) and translation ({len(translation_slides)}) do not match")
-    # print the first line of each slide, for debug
-    for i in range(max(len(original_slides), len(translation_slides))):
-        original_slide = original_slides[i] if i < len(original_slides) else ''
-        translation_slide = translation_slides[i] if i < len(translation_slides) else ''
-        print(f"Slide {i:>2d}: {get_first_line(original_slide):>50} | {get_first_line(translation_slide):50}")
 
 
-def validate_songlyrics_functional(title: str, content: dict) -> ValidationResult:
+def validate_songlyrics(title: str, content: dict) -> ValidationResult:
     """Validate the SongLyrics item."""
     result = ValidationResult(item_type="SongLyrics", title=title)
 
@@ -261,35 +249,8 @@ def validate_songlyrics_functional(title: str, content: dict) -> ValidationResul
     return result
 
 
-def validate_songlyrics(content):
-    """Validate the SongLyrics item."""
-    assert content.get('_richtextfield:Lyrics'), f"Missing _richtextfield:Lyrics in {title}"
 
-    # check transitions
-    transition_info = (content.get('UseCustomTransition'), content.get('CustomTransitionKind'), content.get('CustomTransitionDuration'))
-    if transition_info != ('true', 'LyricScrolling', '0'):
-        warn(title, f"Unexpected transition info: {transition_info}")
-
-    # Find the translations output
-    translations = [key for key in content if key.startswith("slideOutput") and key.endswith("RichTextXml")]
-    if len(translations) != 1:
-        warn(title, f"Expected one translation, found {len(translations)}")
-        return
-    translation_key = translations[0]
-
-    original_slides = get_slides_for_song(content)
-    translation_slides = get_slides_for_song(content, translation_key)
-    assert_translation_ok(original_slides, translation_slides)
-
-    #print(content.keys())
-    if content.get('slideOutput:0:MediaId') != expected_main_media_id:
-        warn(title, f"Expected main media ID {expected_main_media_id}, found {content.get('slideOutput:0:MediaId')}")
-    if content.get('slideOutput:1:MediaId') != expected_greenscreen_media_id:
-        warn(title, f"Expected green-screen media ID {expected_greenscreen_media_id}, found {content.get('slideOutput:1:MediaId')}")
-
-
-
-def validate_plaintext_functional(title: str, content: dict, key: str, greenscreen_screen_idx: Optional[int], translation_screen_idx: int, conn) -> ValidationResult:
+def validate_plaintext(title: str, content: dict, key: str, greenscreen_screen_idx: Optional[int], translation_screen_idx: int, conn) -> ValidationResult:
     """Validate plaintext content items functionally."""
     result = ValidationResult(item_type="Content", title=title)
 
@@ -312,7 +273,7 @@ def validate_plaintext_functional(title: str, content: dict, key: str, greenscre
     if translation_key not in content:
         result.add_warning("Missing translation")
         # Look for prior occurrences
-        prior_matches = look_for_prior_occurrences_functional(main_content, conn)
+        prior_matches = look_for_prior_occurrences(main_content, conn)
         result.prior_matches = prior_matches
         if prior_matches:
             result.add_info(f"Found {len(prior_matches)} similar prior items")
@@ -336,76 +297,7 @@ def validate_plaintext_functional(title: str, content: dict, key: str, greenscre
     return result
 
 
-def validate_plaintext(content, key):
-    assert key in content, f"Missing {key} in {title}"
-    main_content = decode_richtextXML(content[key])
-    if main_content.strip() == '':
-        # image-only slide
-        return
-    if greenscreen_screen_idx is not None:
-        greenscreen_key = f'slideOutput:{greenscreen_screen_idx-1}:RichTextXml'
-        if greenscreen_key in content:
-            warn(title, "Unexpected greenscreen content")
-    translation_key = f'slideOutput:{translation_screen_idx-1}:RichTextXml'
-    if translation_key not in content:
-        warn(title, f"Missing translation")
-        look_for_prior_occurrences(main_content)
-        return
-    translation_content = decode_richtextXML(content[translation_key])
-    main_slides = split_into_sections(main_content)
-    translation_slides = split_into_sections(translation_content)
-    assert_translation_ok(main_slides, translation_slides)
-
-
-def look_for_prior_occurrences(text):
-    """
-    Search all ServiceItems of kind 'Content' in all presentations since 2024-01-01
-    for content with high overlap to the given text (after decoding richtextXML, lowercasing, and normalizing whitespace).
-    Print the 2 highest-overlap items (presentation date, item title, first 100 chars), unless both ratios are < 0.5.
-    """
-    # Normalize input text
-    def normalize(s):
-        return ' '.join(s.lower().split())
-
-    norm_text = normalize(text)
-
-    # Use a single SQL query with a join
-    rows = conn.execute(
-        '''
-        SELECT Presentations.DateGiven, ServiceItems.Title, ServiceItems.Content
-        FROM ServiceItems
-        JOIN Presentations ON ServiceItems.PresentationId = Presentations.PresentationId
-        WHERE ServiceItems.ServiceItemKind = 'Content'
-          AND Presentations.DateGiven > "2024-01-01"
-          AND Presentations.Title NOT LIKE "INCORRECT%"
-        ''').fetchall()
-
-    matches = []
-    for date_given, item_title, content_json in rows:
-        try:
-            content = json.loads(content_json)
-            if '_richtextfield:Main Content' not in content:
-                continue
-            item_text = decode_richtextXML(content['_richtextfield:Main Content'])
-            norm_item_text = normalize(item_text)
-            ratio = difflib.SequenceMatcher(None, norm_text, norm_item_text).ratio()
-            matches.append((ratio, date_given, item_title, item_text))
-        except Exception:
-            continue
-
-    # Sort by ratio descending
-    matches.sort(reverse=True, key=lambda x: x[0])
-    # Only keep matches with ratio >= 0.5
-    top_matches = [m for m in matches if m[0] >= 0.5][:2]
-    if not top_matches:
-        return
-    rprint("[bold yellow]Prior similar Content items:[/bold yellow]")
-    for ratio, date_given, item_title, item_text in top_matches:
-        snippet = item_text.strip().replace('\n', ' ')[:100]
-        rprint(f"[bold]{date_given}[/bold] [dim]{item_title}[/dim] (similarity: {ratio:.2f}): {snippet}")
-    return
-
-def validate_biblepassage_functional(title: str, content: dict, greenscreen_screen_idx: Optional[int], translation_screen_idx: int, conn) -> ValidationResult:
+def validate_biblepassage(title: str, content: dict, greenscreen_screen_idx: Optional[int], translation_screen_idx: int, conn) -> ValidationResult:
     """Validate Bible passage content functionally."""
     result = ValidationResult(item_type="BiblePassage", title=title)
 
@@ -416,7 +308,7 @@ def validate_biblepassage_functional(title: str, content: dict, greenscreen_scre
         result.add_warning("Missing Bible reference")
 
     # Validate the passage content using the plaintext validation
-    passage_result = validate_plaintext_functional(title, content, "_richtextfield:Passage", greenscreen_screen_idx, translation_screen_idx, conn)
+    passage_result = validate_plaintext(title, content, "_richtextfield:Passage", greenscreen_screen_idx, translation_screen_idx, conn)
 
     # Merge the results
     result.warnings.extend(passage_result.warnings)
@@ -425,11 +317,6 @@ def validate_biblepassage_functional(title: str, content: dict, greenscreen_scre
     result.prior_matches = passage_result.prior_matches
 
     return result
-
-
-def validate_biblepassage(content):
-    print(content.get('_textfield:BibleReference'))
-    validate_plaintext(content, key="_richtextfield:Passage")
 
 
 class ProclaimValidator:
@@ -548,11 +435,11 @@ class ProclaimValidator:
             content = json.loads(content_json)
 
             if item_kind == "SongLyrics":
-                item_result = validate_songlyrics_functional(item_title, content)
+                item_result = validate_songlyrics(item_title, content)
             elif item_kind == "Content":
-                item_result = validate_plaintext_functional(item_title, content, "_richtextfield:Main Content", greenscreen_screen_idx, translation_screen_idx, self.conn)
+                item_result = validate_plaintext(item_title, content, "_richtextfield:Main Content", greenscreen_screen_idx, translation_screen_idx, self.conn)
             elif item_kind == "BiblePassage":
-                item_result = validate_biblepassage_functional(item_title, content, greenscreen_screen_idx, translation_screen_idx, self.conn)
+                item_result = validate_biblepassage(item_title, content, greenscreen_screen_idx, translation_screen_idx, self.conn)
             elif item_kind in ["Grouping", "ImageSlideshow"]:
                 # Skip these item types
                 continue
@@ -757,7 +644,48 @@ class ValidateProclaimGUI:
         self.root.mainloop()
 
 
-import argparse
+def print_validation_results_cli(validation: PresentationValidation):
+    """Print validation results to the CLI in a readable format."""
+    print(f"\nPresentation: {validation.title}")
+    print(f"Date: {validation.date_given}")
+    print(f"ID: {validation.presentation_id}")
+    print("=" * 80)
+
+    # Summary
+    items_with_issues = validation.get_items_with_issues()
+    total_items = len(validation.items)
+    print(f"Total items: {total_items}")
+    print(f"Items with issues: {len(items_with_issues)}")
+
+    if not items_with_issues:
+        rprint("\n[bold green]✅ No issues found![/bold green]")
+        return
+
+    rprint(f"\n[bold yellow]⚠️  Found issues in {len(items_with_issues)} items:[/bold yellow]")
+
+    # Details for each item with issues
+    for item in items_with_issues:
+        print(f"\n--- {item.item_type}: {item.title} ---")
+
+        if item.warnings:
+            for warning in item.warnings:
+                rprint(f"  [bold red]⚠️  {warning}[/bold red]")
+
+        if item.info:
+            for info in item.info:
+                rprint(f"  [cyan]ℹ️  {info}[/cyan]")
+
+        if item.prior_matches:
+            rprint("  [bold yellow]📋 Similar prior items:[/bold yellow]")
+            for match in item.prior_matches:
+                rprint(f"    [bold]• {match['date_given']}[/bold] [dim]{match['title']}[/dim] (similarity: {match['ratio']:.2f})")
+                print(f"      {match['snippet']}")
+
+        if item.debug:
+            rprint("  [dim]🔍 Debug info:[/dim]")
+            for debug in item.debug:
+                print(f"    {debug}")
+
 
 # Command line arguments
 parser = argparse.ArgumentParser(description='Validate Proclaim presentations.')
@@ -771,83 +699,27 @@ if args.gui:
     app.run()
     exit()
 
+# CLI validation using functional interface
+validator = ProclaimValidator()
+validator.connect()
 
-# Connect to the Proclaim database
-proclaim_data = Path('~/Library/Application Support/Proclaim/Data/5sos6hqf.xyd/').expanduser()
-presentations_db = proclaim_data / 'PresentationManager' / 'PresentationManager.db'
+# Get the presentation to validate
+presentations = validator.get_presentations(limit=args.index + 1)
+if not presentations:
+    print("No presentations found after 2024-01-01")
+    exit(1)
 
-conn = sqlite3.connect(presentations_db)
+if args.index >= len(presentations):
+    print(f"Index {args.index} out of range. Only {len(presentations)} presentations available.")
+    exit(1)
 
-# Find the most recent presentation
-presentations = conn.execute(
-    '''
-    SELECT
-        PresentationId, DateGiven, Title, Content
-        FROM Presentations
-        WHERE DateGiven > "2024-01-01" AND Title NOT LIKE "INCORRECT%"
-        ORDER BY DateGiven DESC
-        LIMIT 1 OFFSET ?
-    ;''', (args.index,))
+selected_presentation = presentations[args.index]
+print(f"Validating presentation {selected_presentation['title']} ({selected_presentation['id']})")
 
-most_recent_presentation = presentations.fetchone()
-assert most_recent_presentation is not None, "No presentations found after 2024-01-01"
+# Validate the presentation
+validation_result = validator.validate_presentation(selected_presentation['id'])
 
-# Get all the items in that presentation
-presentation_id = most_recent_presentation[0]
-presentation_title = most_recent_presentation[2]
-print(f"Validating presentation {presentation_title} ({presentation_id})")
-presentation_content = json.loads(most_recent_presentation[3])
+# Print results
+print_validation_results_cli(validation_result)
 
-def get_virtual_screens():
-    virtual_screens = json.loads(presentation_content.get('VirtualScreens', '[]'))
-    return [screen for screen in virtual_screens if screen['outputKind'] in ["Slides", "SlidesAlternateContent"]]
-
-greenscreen_screen_idx = next((i for i, screen in enumerate(get_virtual_screens()) if screen['name'] == 'Green Screen'), None)
-print(f"Green screen index: {greenscreen_screen_idx}")
-
-def get_idx_of_translations(languages):
-    virtual_screens = get_virtual_screens()
-    translation_screen_idx = [i for i, screen in enumerate(virtual_screens) if any(lang in screen['name'] for lang in languages)]
-    if len(translation_screen_idx) != 1:
-        for i, screen in enumerate(virtual_screens):
-            print(f"Screen {i}: {screen['name']}")
-        raise ValueError(f"Expected one translation screen, found {len(translation_screen_idx)}")
-    return translation_screen_idx[0]
-
-translation_screen_idx = get_idx_of_translations(['French', 'Haitian'])
-print(f"Translation screen index: {translation_screen_idx}")
-
-service_items = conn.execute(
-    '''
-    SELECT
-        Title, Content, ServiceItemKind
-        FROM ServiceItems
-        WHERE PresentationId = ?
-    ;''', (presentation_id,)).fetchall()
-
-
-song_item_data = []
-for i, (title, content_json, item_kind) in enumerate(service_items):
-    print(f"{item_kind}: {title}")
-    content = json.loads(content_json)
-    if title.lower() in ['blank', 'ncf slide', 'offering slide']:
-        continue
-    if item_kind == "SongLyrics":
-        validate_songlyrics(content)
-        song_item_data.append(dict(title=title, **content))
-    elif item_kind == "Content":
-        validate_plaintext(content, key="_richtextfield:Main Content")
-    elif item_kind == "BiblePassage":
-        validate_biblepassage(content)
-    elif item_kind in ["Grouping", "ImageSlideshow"]:
-        continue
-    else:
-        print(f"Unknown item kind: {item_kind}")
-        continue
-
-conn.close()
-
-
-# Make a table of all of the song lyrics items
-#import pandas as pd
-#pd.DataFrame(song_item_data).to_csv('song_lyrics.csv', index=False)
+validator.disconnect()

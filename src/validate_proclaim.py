@@ -97,10 +97,6 @@ def decode_richtextXML(xml):
 
 
 
-def warn(item_name, message):
-    rprint(f"[bold red]***Warning***[/bold red]: {item_name}: {message}")
-
-
 def look_for_prior_occurrences(text, conn) -> List[Dict[str, Any]]:
     """
     Search all ServiceItems of kind 'Content' in all presentations since 2024-01-01

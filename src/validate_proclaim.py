@@ -1,11 +1,3 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "lxml",
-#     "rich",
-# ]
-# ///
 import difflib
 import json
 import sqlite3
@@ -21,6 +13,8 @@ import threading
 from lxml import etree
 from rich import print as rprint
 
+from usfm_processor import extract_verses
+
 
 @dataclass
 class ValidationResult:
@@ -31,6 +25,7 @@ class ValidationResult:
     info: List[str] = field(default_factory=list)
     debug: List[str] = field(default_factory=list)
     prior_matches: List[Dict[str, Any]] = field(default_factory=list)
+    usfm_reference_text: Optional[str] = None
 
     def add_warning(self, message: str):
         self.warnings.append(message)
@@ -293,13 +288,32 @@ def validate_plaintext(title: str, content: dict, key: str, greenscreen_screen_i
     return result
 
 
-def validate_biblepassage(title: str, content: dict, greenscreen_screen_idx: Optional[int], translation_screen_idx: int, conn) -> ValidationResult:
+def validate_biblepassage(title: str, content: dict, greenscreen_screen_idx: Optional[int], translation_screen_idx: int, conn, validator: 'ProclaimValidator') -> ValidationResult:
     """Validate Bible passage content functionally."""
     result = ValidationResult(item_type="BiblePassage", title=title)
 
     bible_ref = content.get('_textfield:BibleReference')
     if bible_ref:
         result.add_info(f"Bible reference: {bible_ref}")
+
+        # Look up the passage from USFM
+        usfm_text = validator.lookup_bible_passage(bible_ref)
+        if usfm_text:
+            result.usfm_reference_text = usfm_text
+
+            # Check if we have existing passage text to compare
+            if '_richtextfield:Passage' in content:
+                existing_text = decode_richtextXML(content['_richtextfield:Passage'])
+                existing_normalized = ' '.join(existing_text.lower().split())
+                usfm_normalized = ' '.join(usfm_text.lower().split())
+
+                # Calculate similarity ratio
+                similarity = difflib.SequenceMatcher(None, existing_normalized, usfm_normalized).ratio()
+
+                if similarity < 0.5:
+                    result.add_warning(f"Passage text differs significantly from USFM reference (similarity: {similarity:.2f})")
+                elif similarity < 0.8:
+                    result.add_info(f"Passage text has some differences from USFM reference (similarity: {similarity:.2f})")
     else:
         result.add_warning("Missing Bible reference")
 
@@ -318,13 +332,29 @@ def validate_biblepassage(title: str, content: dict, greenscreen_screen_idx: Opt
 class ProclaimValidator:
     """Class to handle database connections and presentation validation."""
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: Optional[str] = None, usfm_zipfile: Optional[str] = None):
         if db_path is None:
             proclaim_data = Path('~/Library/Application Support/Proclaim/Data/5sos6hqf.xyd/').expanduser()
             self.db_path = str(proclaim_data / 'PresentationManager' / 'PresentationManager.db')
         else:
             self.db_path = db_path
         self.conn: Optional[sqlite3.Connection] = None
+
+        if usfm_zipfile is None:
+            # Look for common USFM zipfile locations
+            possible_paths = [
+                Path('~/Library/Application Support/Proclaim/Data/5sos6hqf.xyd/bible.zip').expanduser(),
+                Path('~/Documents/bible.zip').expanduser(),
+                Path('./bible.zip'),
+            ]
+            for path in possible_paths:
+                if path.exists():
+                    self.usfm_zipfile = str(path)
+                    break
+            else:
+                self.usfm_zipfile = None
+        else:
+            self.usfm_zipfile = usfm_zipfile
 
     def connect(self):
         """Connect to the Proclaim database."""
@@ -379,6 +409,17 @@ class ProclaimValidator:
             raise ValueError(f"Expected one translation screen, found {len(translation_screen_idx)}")
 
         return greenscreen_screen_idx, translation_screen_idx[0]
+
+    def lookup_bible_passage(self, bible_ref: str) -> Optional[str]:
+        """Look up a Bible passage from the USFM zipfile."""
+        if not self.usfm_zipfile:
+            return None
+
+        try:
+            return extract_verses(self.usfm_zipfile, bible_ref)
+        except Exception as e:
+            # Return error message instead of None to distinguish from missing zipfile
+            return f"Error looking up reference: {e}"
 
     def validate_presentation(self, presentation_id: str) -> PresentationValidation:
         """Validate a single presentation by ID."""
@@ -435,7 +476,7 @@ class ProclaimValidator:
             elif item_kind == "Content":
                 item_result = validate_plaintext(item_title, content, "_richtextfield:Main Content", greenscreen_screen_idx, translation_screen_idx, self.conn)
             elif item_kind == "BiblePassage":
-                item_result = validate_biblepassage(item_title, content, greenscreen_screen_idx, translation_screen_idx, self.conn)
+                item_result = validate_biblepassage(item_title, content, greenscreen_screen_idx, translation_screen_idx, self.conn, self)
             elif item_kind in ["Grouping", "ImageSlideshow"]:
                 # Skip these item types
                 continue
@@ -587,7 +628,7 @@ class ValidateProclaimGUI:
         self.append_detail(f"{item.item_type}: {item.title}")
         self.append_detail("=" * 60)
 
-        if not item.has_issues() and not item.info and not item.prior_matches and not item.debug:
+        if not item.has_issues() and not item.info and not item.prior_matches and not item.debug and not item.usfm_reference_text:
             self.append_detail("\n✅ No issues or information for this item.")
             return
 
@@ -600,6 +641,12 @@ class ValidateProclaimGUI:
             self.append_detail("\nℹ️  Information:")
             for info in item.info:
                 self.append_detail(f"  • {info}")
+
+        if item.usfm_reference_text:
+            self.append_detail("\n📖 USFM Reference Text:")
+            # Display the reference text, potentially with line breaks
+            for line in item.usfm_reference_text.split('\n'):
+                self.append_detail(f"{line}")
 
         if item.prior_matches:
             self.append_detail("\n📋 Similar prior items:")

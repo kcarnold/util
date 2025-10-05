@@ -26,6 +26,7 @@ class ValidationResult:
     debug: List[str] = field(default_factory=list)
     prior_matches: List[Dict[str, Any]] = field(default_factory=list)
     bible_reference: Optional[str] = None  # For BiblePassage items
+    passage_text: Optional[str] = None  # The actual passage text from Proclaim (for comparison)
     usfm_reference_text: Optional[str] = None  # Lazily loaded
 
     def add_warning(self, message: str):
@@ -298,6 +299,11 @@ def validate_biblepassage(title: str, content: dict, greenscreen_screen_idx: Opt
         result.add_info(f"Bible reference: {bible_ref}")
         # Store the reference for lazy lookup later (don't look it up now - it's slow!)
         result.bible_reference = bible_ref
+
+        # Store the passage text for comparison when USFM is loaded
+        translation_key = f'slideOutput:{translation_screen_idx-1}:RichTextXml'
+        if translation_key in content:
+            result.passage_text = decode_richtextXML(content[translation_key])
     else:
         result.add_warning("Missing Bible reference")
 
@@ -698,9 +704,23 @@ class ValidateProclaimGUI:
                         self.usfm_cache[bible_ref] = usfm_text
                         item.usfm_reference_text = usfm_text
 
-                        # Check if we have existing passage text to compare
-                        # We need to get the content from somewhere - let's add similarity check later
-                        # For now just display the text
+                        # Compare with existing passage text if available
+                        if item.passage_text and not usfm_text.startswith("Error"):
+                            existing_normalized = ' '.join(item.passage_text.lower().split())
+                            usfm_normalized = ' '.join(usfm_text.lower().split())
+
+                            # Calculate similarity ratio
+                            similarity = difflib.SequenceMatcher(None, existing_normalized, usfm_normalized).ratio()
+
+                            # Add warnings/info based on similarity
+                            if similarity < 0.5:
+                                warning = f"Passage text differs significantly from USFM reference (similarity: {similarity:.2f})"
+                                if warning not in item.warnings:
+                                    item.add_warning(warning)
+                            elif similarity < 0.8:
+                                info = f"Passage text has some differences from USFM reference (similarity: {similarity:.2f})"
+                                if info not in item.info:
+                                    item.add_info(info)
 
                         # Refresh the display if this item is still selected
                         selection = self.items_tree.selection()

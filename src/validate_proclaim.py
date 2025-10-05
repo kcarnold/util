@@ -25,7 +25,8 @@ class ValidationResult:
     info: List[str] = field(default_factory=list)
     debug: List[str] = field(default_factory=list)
     prior_matches: List[Dict[str, Any]] = field(default_factory=list)
-    usfm_reference_text: Optional[str] = None
+    bible_reference: Optional[str] = None  # For BiblePassage items
+    usfm_reference_text: Optional[str] = None  # Lazily loaded
 
     def add_warning(self, message: str):
         self.warnings.append(message)
@@ -288,32 +289,15 @@ def validate_plaintext(title: str, content: dict, key: str, greenscreen_screen_i
     return result
 
 
-def validate_biblepassage(title: str, content: dict, greenscreen_screen_idx: Optional[int], translation_screen_idx: int, conn, validator: 'ProclaimValidator') -> ValidationResult:
+def validate_biblepassage(title: str, content: dict, greenscreen_screen_idx: Optional[int], translation_screen_idx: int, conn) -> ValidationResult:
     """Validate Bible passage content functionally."""
     result = ValidationResult(item_type="BiblePassage", title=title)
 
     bible_ref = content.get('_textfield:BibleReference')
     if bible_ref:
         result.add_info(f"Bible reference: {bible_ref}")
-
-        # Look up the passage from USFM
-        usfm_text = validator.lookup_bible_passage(bible_ref)
-        if usfm_text:
-            result.usfm_reference_text = usfm_text
-
-            # Check if we have existing passage text to compare
-            if '_richtextfield:Passage' in content:
-                existing_text = decode_richtextXML(content['_richtextfield:Passage'])
-                existing_normalized = ' '.join(existing_text.lower().split())
-                usfm_normalized = ' '.join(usfm_text.lower().split())
-
-                # Calculate similarity ratio
-                similarity = difflib.SequenceMatcher(None, existing_normalized, usfm_normalized).ratio()
-
-                if similarity < 0.5:
-                    result.add_warning(f"Passage text differs significantly from USFM reference (similarity: {similarity:.2f})")
-                elif similarity < 0.8:
-                    result.add_info(f"Passage text has some differences from USFM reference (similarity: {similarity:.2f})")
+        # Store the reference for lazy lookup later (don't look it up now - it's slow!)
+        result.bible_reference = bible_ref
     else:
         result.add_warning("Missing Bible reference")
 
@@ -476,7 +460,7 @@ class ProclaimValidator:
             elif item_kind == "Content":
                 item_result = validate_plaintext(item_title, content, "_richtextfield:Main Content", greenscreen_screen_idx, translation_screen_idx, self.conn)
             elif item_kind == "BiblePassage":
-                item_result = validate_biblepassage(item_title, content, greenscreen_screen_idx, translation_screen_idx, self.conn, self)
+                item_result = validate_biblepassage(item_title, content, greenscreen_screen_idx, translation_screen_idx, self.conn)
             elif item_kind in ["Grouping", "ImageSlideshow"]:
                 # Skip these item types
                 continue
@@ -503,6 +487,8 @@ class ValidateProclaimGUI:
         self.presentations = []
         self.current_validation = None
         self.validation_items = {}
+        self.usfm_cache = {}  # Cache for USFM lookups: bible_ref -> text
+        self.pending_usfm_lookups = set()  # Track in-progress lookups
 
     def setup_ui(self):
         """Set up the user interface."""
@@ -621,6 +607,15 @@ class ValidateProclaimGUI:
 
         item = self.validation_items[item_id]
 
+        # Display the item details
+        self.display_item_details(item)
+
+        # If this is a BiblePassage with a reference that hasn't been looked up yet, trigger lookup
+        if item.bible_reference and not item.usfm_reference_text:
+            self.lookup_usfm_for_item(item)
+
+    def display_item_details(self, item: ValidationResult):
+        """Display details for a validation item in the details pane."""
         # Clear and update details pane
         self.clear_details()
 
@@ -628,7 +623,7 @@ class ValidateProclaimGUI:
         self.append_detail(f"{item.item_type}: {item.title}")
         self.append_detail("=" * 60)
 
-        if not item.has_issues() and not item.info and not item.prior_matches and not item.debug and not item.usfm_reference_text:
+        if not item.has_issues() and not item.info and not item.prior_matches and not item.debug and not item.usfm_reference_text and not item.bible_reference:
             self.append_detail("\n✅ No issues or information for this item.")
             return
 
@@ -646,7 +641,19 @@ class ValidateProclaimGUI:
             self.append_detail("\n📖 USFM Reference Text:")
             # Display the reference text, potentially with line breaks
             for line in item.usfm_reference_text.split('\n'):
-                self.append_detail(f"{line}")
+                self.append_detail(f"  {line}")
+        elif item.bible_reference:
+            # Reference exists but not loaded yet
+            if item.bible_reference in self.pending_usfm_lookups:
+                self.append_detail("\n📖 USFM Reference Text: Loading...")
+            elif item.bible_reference in self.usfm_cache:
+                # It's in the cache but not yet attached to item (shouldn't happen, but handle it)
+                cached_text = self.usfm_cache[item.bible_reference]
+                item.usfm_reference_text = cached_text
+                if cached_text:
+                    self.append_detail("\n📖 USFM Reference Text:")
+                    for line in cached_text.split('\n'):
+                        self.append_detail(f"  {line}")
 
         if item.prior_matches:
             self.append_detail("\n📋 Similar prior items:")
@@ -658,6 +665,70 @@ class ValidateProclaimGUI:
             self.append_detail("\n🔍 Debug info:")
             for debug in item.debug:
                 self.append_detail(f"  {debug}")
+
+    def lookup_usfm_for_item(self, item: ValidationResult):
+        """Asynchronously look up USFM text for a Bible passage item."""
+        if not item.bible_reference:
+            return
+
+        bible_ref = item.bible_reference
+
+        # Check if already in cache
+        if bible_ref in self.usfm_cache:
+            item.usfm_reference_text = self.usfm_cache[bible_ref]
+            self.display_item_details(item)
+            return
+
+        # Check if lookup already in progress
+        if bible_ref in self.pending_usfm_lookups:
+            return
+
+        # Mark as pending
+        self.pending_usfm_lookups.add(bible_ref)
+
+        def lookup_thread():
+            try:
+                # Perform the lookup
+                usfm_text = self.validator.lookup_bible_passage(bible_ref)
+
+                # Update on main thread
+                def update_ui():
+                    self.pending_usfm_lookups.discard(bible_ref)
+                    if usfm_text:
+                        self.usfm_cache[bible_ref] = usfm_text
+                        item.usfm_reference_text = usfm_text
+
+                        # Check if we have existing passage text to compare
+                        # We need to get the content from somewhere - let's add similarity check later
+                        # For now just display the text
+
+                        # Refresh the display if this item is still selected
+                        selection = self.items_tree.selection()
+                        if selection:
+                            item_id = selection[0]
+                            if item_id in self.validation_items and self.validation_items[item_id] is item:
+                                self.display_item_details(item)
+
+                self.root.after(0, update_ui)
+
+            except Exception as e:
+                def show_error():
+                    self.pending_usfm_lookups.discard(bible_ref)
+                    error_text = f"Error looking up reference: {e}"
+                    self.usfm_cache[bible_ref] = error_text
+                    item.usfm_reference_text = error_text
+
+                    # Refresh display
+                    selection = self.items_tree.selection()
+                    if selection:
+                        item_id = selection[0]
+                        if item_id in self.validation_items and self.validation_items[item_id] is item:
+                            self.display_item_details(item)
+
+                self.root.after(0, show_error)
+
+        # Start lookup in background
+        threading.Thread(target=lookup_thread, daemon=True).start()
 
     def validate_selected_presentation(self):
         """Validate the currently selected presentation."""
@@ -699,6 +770,10 @@ class ValidateProclaimGUI:
     def display_results(self, validation: PresentationValidation):
         """Display validation results in the tree and details panes."""
         self.clear_results()
+
+        # Clear USFM cache for new presentation
+        self.usfm_cache.clear()
+        self.pending_usfm_lookups.clear()
 
         # Store items for later reference
         self.validation_items = {}

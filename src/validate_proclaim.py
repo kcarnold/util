@@ -647,7 +647,7 @@ class ValidateProclaimGUI:
             self.append_detail("\n📖 USFM Reference Text:")
             # Display the reference text, potentially with line breaks
             for line in item.usfm_reference_text.split('\n'):
-                self.append_detail(f"  {line}")
+                self.append_detail(f"{line}")
         elif item.bible_reference:
             # Reference exists but not loaded yet
             if item.bible_reference in self.pending_usfm_lookups:

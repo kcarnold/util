@@ -897,10 +897,10 @@ def print_validation_results_cli(validation: PresentationValidation):
 # Command line arguments
 parser = argparse.ArgumentParser(description='Validate Proclaim presentations.')
 parser.add_argument('-i', '--index', type=int, default=0, help='Index of the presentation to validate (default: 0 for most recent)')
-parser.add_argument('--gui', action='store_true', help='Launch the GUI instead of CLI validation')
+parser.add_argument('--cli', action='store_true', help='Launch the CLI instead of GUI validation')
 args = parser.parse_args()
 
-if args.gui:
+if not args.cli:
     # Launch GUI
     app = ValidateProclaimGUI()
     app.run()

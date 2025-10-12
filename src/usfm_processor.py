@@ -183,8 +183,8 @@ def parse_single_verse_reference(ref: str) -> Tuple[str, Optional[str], str, Opt
         end_verse = match.group(5)
         return book_name, start_chapter, start_verse, f"{end_chapter}:{end_verse}"
 
-    # Try to match chapter:verse format first
-    chapter_verse_pattern = r'^([A-Za-z0-9\s]+?)\s+(\d+):(\d+)(?:-(\d+))?$'
+    # Try to match chapter:verse format first (with optional verse suffixes like 'a', 'b')
+    chapter_verse_pattern = r'^([A-Za-z0-9\s]+?)\s+(\d+):(\d+)(?:[a-z])?(?:-(\d+)(?:[a-z])?)?$'
     match = re.match(chapter_verse_pattern, ref.strip())
     if match:
         book_name = match.group(1).strip()

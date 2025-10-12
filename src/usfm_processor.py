@@ -1,6 +1,7 @@
 import io
 import json
 import re
+import sqlite3
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -448,11 +449,95 @@ def extract_verses_from_usj(usj: Dict[str, Any], chapter: Optional[str], start_v
             return result
 
 
-def extract_verses(zipfile_path: str, ref: str) -> str:
-    """Extract verses from a USFM zip file based on a verse reference.
+def extract_verses_from_sqlite(db_path: str, book_name: str, chapter: Optional[str], start_verse: str, end_verse: Optional[str], name_to_id: Dict[str, str]) -> List[str]:
+    """Extract verses from a SQLite database.
 
     Args:
-        zipfile_path: Path to the ZIP file containing USFM files
+        db_path: Path to the SQLite database
+        book_name: Name of the book
+        chapter: Chapter number (or None for single-chapter books)
+        start_verse: Starting verse number
+        end_verse: Ending verse (or None for single verse, or "chapter:verse" for cross-chapter)
+
+    Returns:
+        List of formatted verse strings
+    """
+    # Get the book ID
+    book_id = name_to_id.get(book_name.lower())
+    if not book_id:
+        raise ValueError(f"Unknown book name: {book_name}")
+
+    conn = sqlite3.Connection(db_path)
+    cursor = conn.cursor()
+
+    # Check if this is a cross-chapter range
+    is_cross_chapter = end_verse and ':' in end_verse
+
+    if is_cross_chapter:
+        # Parse cross-chapter range
+        assert end_verse is not None
+        end_chapter_str, end_verse_str = end_verse.split(':')
+        start_chapter = int(chapter or "1")
+        end_chapter = int(end_chapter_str)
+        start_verse_num = int(start_verse)
+        end_verse_num = int(end_verse_str)
+
+        # Query verses across chapters
+        cursor.execute("""
+            SELECT chapter, verse, text
+            FROM verses
+            WHERE book_id = ?
+              AND (
+                (chapter = ? AND verse >= ?) OR
+                (chapter > ? AND chapter < ?) OR
+                (chapter = ? AND verse <= ?)
+              )
+            ORDER BY chapter, verse
+        """, (book_id.upper(), start_chapter, start_verse_num, start_chapter, end_chapter, end_chapter, end_verse_num))
+
+        verses = cursor.fetchall()
+        conn.close()
+
+        return [f"{ch}:{v} {text}" for ch, v, text in verses]
+
+    else:
+        # Single chapter range
+        target_chapter = int(chapter or "1")
+
+        if start_verse == "1" and end_verse is None:
+            # Entire chapter
+            cursor.execute("""
+                SELECT verse, text
+                FROM verses
+                WHERE book_id = ? AND chapter = ?
+                ORDER BY verse
+            """, (book_id.upper(), target_chapter))
+        else:
+            # Specific verse range
+            start_verse_num = int(start_verse)
+            end_verse_num = int(end_verse) if end_verse else start_verse_num
+
+            cursor.execute("""
+                SELECT verse, text
+                FROM verses
+                WHERE book_id = ? AND chapter = ? AND verse >= ? AND verse <= ?
+                ORDER BY verse
+            """, (book_id.upper(), target_chapter, start_verse_num, end_verse_num))
+
+        verses = cursor.fetchall()
+        conn.close()
+
+        if not verses:
+            raise ValueError(f"Verses not found in chapter {target_chapter}")
+
+        return [f"{v} {text}" for v, text in verses]
+
+
+def extract_verses(zipfile_path: str, ref: str) -> str:
+    """Extract verses from a USFM zip file or SQLite database based on a verse reference.
+
+    Args:
+        zipfile_path: Path to the ZIP file containing USFM files or SQLite database (.db, .sqlite)
         ref: Verse reference like "Psalm 153:2", "Matthew 1:18-20", "Jude 3",
              "Exodus 15:1-2,11-15", or "Exodus 15:29-16:2"
 
@@ -462,33 +547,46 @@ def extract_verses(zipfile_path: str, ref: str) -> str:
     # Load the book abbreviations
     name_to_id = load_book_abbreviations()
 
-    # Read the zip file
-    with open(zipfile_path, 'rb') as f:
-        zip_data = f.read()
-
-    # Extract USFM files
-    file_contents = extract_usfm_files_from_zip(zip_data)
-
     # Parse the verse reference(s)
     parsed_refs = parse_verse_reference(ref)
 
+    # Detect file type by extension
+    file_path = Path(zipfile_path)
+    is_sqlite = file_path.suffix.lower() in ['.db', '.sqlite', '.sqlite3']
+
     all_verse_lines = []
 
-    for book_name, chapter, start_verse, end_verse in parsed_refs:
-        # Find the appropriate USFM file
-        filename = find_book_in_usfm_files(book_name, file_contents, name_to_id)
-        usfm_content = file_contents[filename]
+    if is_sqlite:
+        # Extract verses from SQLite database
+        for book_name, chapter, start_verse, end_verse in parsed_refs:
+            verse_lines = extract_verses_from_sqlite(
+                zipfile_path, book_name, chapter, start_verse, end_verse, name_to_id
+            )
+            all_verse_lines.extend(verse_lines)
+    else:
+        # Extract verses from ZIP file (original implementation)
+        # Read the zip file
+        with open(zipfile_path, 'rb') as f:
+            zip_data = f.read()
 
-        # Parse the USFM content
-        parsed = parse_usfm(usfm_content)
-        if 'errors' in parsed:
-            raise ValueError(f"USFM parsing errors: {parsed['errors']}")
+        # Extract USFM files
+        file_contents = extract_usfm_files_from_zip(zip_data)
 
-        usj = parsed['usj']
+        for book_name, chapter, start_verse, end_verse in parsed_refs:
+            # Find the appropriate USFM file
+            filename = find_book_in_usfm_files(book_name, file_contents, name_to_id)
+            usfm_content = file_contents[filename]
 
-        # Extract the requested verses
-        verse_lines = extract_verses_from_usj(usj, chapter, start_verse, end_verse)
-        all_verse_lines.extend(verse_lines)
+            # Parse the USFM content
+            parsed = parse_usfm(usfm_content)
+            if 'errors' in parsed:
+                raise ValueError(f"USFM parsing errors: {parsed['errors']}")
+
+            usj = parsed['usj']
+
+            # Extract the requested verses
+            verse_lines = extract_verses_from_usj(usj, chapter, start_verse, end_verse)
+            all_verse_lines.extend(verse_lines)
 
     return '\n--\n'.join(all_verse_lines)
 
@@ -498,20 +596,24 @@ def main() -> None:
     import sys
 
     if len(sys.argv) != 3:
-        print("Usage: python usfm_processor.py <zipfile> <verse_reference>", file=sys.stderr)
-        print("Examples:", file=sys.stderr)
-        print("  python usfm_processor.py bible.zip 'Psalm 153:2'", file=sys.stderr)
-        print("  python usfm_processor.py bible.zip 'Matthew 1:18-20'", file=sys.stderr)
-        print("  python usfm_processor.py bible.zip 'Jude 3'", file=sys.stderr)
-        print("  python usfm_processor.py bible.zip 'Exodus 15:1-2,11-15'", file=sys.stderr)
-        print("  python usfm_processor.py bible.zip 'Exodus 15:29-16:2'", file=sys.stderr)
+        print("Usage: extract_verses <zipfile_or_database> <verse_reference>", file=sys.stderr)
+        print("\nExamples:", file=sys.stderr)
+        print("  # From ZIP file (slower, parses USFM each time):", file=sys.stderr)
+        print("  extract_verses bible.zip 'Psalm 153:2'", file=sys.stderr)
+        print("  extract_verses bible.zip 'Matthew 1:18-20'", file=sys.stderr)
+        print("  extract_verses bible.zip 'Jude 3'", file=sys.stderr)
+        print("  extract_verses bible.zip 'Exodus 15:1-2,11-15'", file=sys.stderr)
+        print("  extract_verses bible.zip 'Exodus 15:29-16:2'", file=sys.stderr)
+        print("\n  # From SQLite database (faster, requires preprocessing):", file=sys.stderr)
+        print("  extract_verses bible.db 'Matthew 1:18-20'", file=sys.stderr)
+        print("\nTip: Use 'preprocess_usfm bible.zip bible.db' to create a fast SQLite database", file=sys.stderr)
         sys.exit(1)
 
-    zipfile_path = sys.argv[1]
+    file_path = sys.argv[1]
     verse_ref = sys.argv[2]
 
     try:
-        result = extract_verses(zipfile_path, verse_ref)
+        result = extract_verses(file_path, verse_ref)
         print(result)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)

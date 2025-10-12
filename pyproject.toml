@@ -16,3 +16,4 @@ dependencies = [
 validate_proclaim = "validate_proclaim:main"
 extract_usfm = "extract_usfm:main"
 extract_verses = "usfm_processor:main"
+preprocess_usfm = "preprocess_usfm_to_sqlite:main"

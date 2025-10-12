@@ -94,25 +94,36 @@ def decode_richtextXML(xml):
 
 
 
-def look_for_prior_occurrences(text, conn) -> List[Dict[str, Any]]:
+def look_for_prior_occurrences(text, conn, exclude_presentation_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Search all ServiceItems of kind 'Content' in all presentations since 2024-01-01
     for content with high overlap to the given text (after decoding richtextXML, lowercasing, and normalizing whitespace).
     Return the 2 highest-overlap items (presentation date, item title, first 100 chars), unless both ratios are < 0.5.
+
+    Args:
+        text: The text to search for similar content
+        conn: Database connection
+        exclude_presentation_id: Optional presentation ID to exclude from search (typically the current presentation)
     """
     def normalize(s):
         return ' '.join(s.lower().split())
 
     norm_text = normalize(text)
 
-    rows = conn.execute(
-        '''
+    # Build query with optional exclusion
+    query = '''
         SELECT p.DateGiven, si.Title, si.Content
         FROM ServiceItems si
         JOIN Presentations p ON si.PresentationId = p.PresentationId
         WHERE si.ServiceItemKind = 'Content'
           AND p.DateGiven > "2024-01-01"
-        ''').fetchall()
+    '''
+    params = []
+    if exclude_presentation_id:
+        query += ' AND p.PresentationId != ?'
+        params.append(exclude_presentation_id)
+
+    rows = conn.execute(query, params).fetchall()
 
     matches = []
     for date_given, item_title, content_json in rows:
@@ -243,7 +254,7 @@ def validate_songlyrics(title: str, content: dict) -> ValidationResult:
 
 
 
-def validate_plaintext(title: str, content: dict, key: str, greenscreen_screen_idx: Optional[int], translation_screen_idx: int, conn) -> ValidationResult:
+def validate_plaintext(title: str, content: dict, key: str, greenscreen_screen_idx: Optional[int], translation_screen_idx: int, conn, presentation_id: Optional[str] = None) -> ValidationResult:
     """Validate plaintext content items functionally."""
     result = ValidationResult(item_type="Content", title=title)
 
@@ -266,7 +277,7 @@ def validate_plaintext(title: str, content: dict, key: str, greenscreen_screen_i
     if translation_key not in content:
         result.add_warning("Missing translation")
         # Look for prior occurrences
-        prior_matches = look_for_prior_occurrences(main_content, conn)
+        prior_matches = look_for_prior_occurrences(main_content, conn, exclude_presentation_id=presentation_id)
         result.prior_matches = prior_matches
         if prior_matches:
             result.add_info(f"Found {len(prior_matches)} similar prior items")
@@ -290,7 +301,7 @@ def validate_plaintext(title: str, content: dict, key: str, greenscreen_screen_i
     return result
 
 
-def validate_biblepassage(title: str, content: dict, greenscreen_screen_idx: Optional[int], translation_screen_idx: int, conn) -> ValidationResult:
+def validate_biblepassage(title: str, content: dict, greenscreen_screen_idx: Optional[int], translation_screen_idx: int, conn, presentation_id: Optional[str] = None) -> ValidationResult:
     """Validate Bible passage content functionally."""
     result = ValidationResult(item_type="BiblePassage", title=title)
 
@@ -308,7 +319,7 @@ def validate_biblepassage(title: str, content: dict, greenscreen_screen_idx: Opt
         result.add_warning("Missing Bible reference")
 
     # Validate the passage content using the plaintext validation
-    passage_result = validate_plaintext(title, content, "_richtextfield:Passage", greenscreen_screen_idx, translation_screen_idx, conn)
+    passage_result = validate_plaintext(title, content, "_richtextfield:Passage", greenscreen_screen_idx, translation_screen_idx, conn, presentation_id)
 
     # Merge the results
     result.warnings.extend(passage_result.warnings)
@@ -464,9 +475,9 @@ class ProclaimValidator:
             if item_kind == "SongLyrics":
                 item_result = validate_songlyrics(item_title, content)
             elif item_kind == "Content":
-                item_result = validate_plaintext(item_title, content, "_richtextfield:Main Content", greenscreen_screen_idx, translation_screen_idx, self.conn)
+                item_result = validate_plaintext(item_title, content, "_richtextfield:Main Content", greenscreen_screen_idx, translation_screen_idx, self.conn, presentation_id)
             elif item_kind == "BiblePassage":
-                item_result = validate_biblepassage(item_title, content, greenscreen_screen_idx, translation_screen_idx, self.conn)
+                item_result = validate_biblepassage(item_title, content, greenscreen_screen_idx, translation_screen_idx, self.conn, presentation_id)
             elif item_kind in ["Grouping", "ImageSlideshow"]:
                 # Skip these item types
                 continue
@@ -483,11 +494,14 @@ class ProclaimValidator:
 class ValidateProclaimGUI:
     """Tkinter GUI for Proclaim presentation validation."""
 
-    def __init__(self):
-        self.validator = ProclaimValidator()
+    def __init__(self, db_path: Optional[str] = None, usfm_zipfile: Optional[str] = None):
+        self.validator = ProclaimValidator(db_path=db_path, usfm_zipfile=usfm_zipfile)
         self.root = tk.Tk()
         self.root.title("Proclaim Presentation Validator")
         self.root.geometry("1000x700")
+        # raise window to front
+        self.root.lift()
+        self.root.focus_force()
 
         self.setup_ui()
         self.presentations = []

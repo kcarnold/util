@@ -27,6 +27,7 @@ class ValidationResult:
     prior_matches: List[Dict[str, Any]] = field(default_factory=list)
     bible_reference: Optional[str] = None  # For BiblePassage items
     passage_text: Optional[str] = None  # The actual passage text from Proclaim (for comparison)
+    main_content: Optional[str] = None  # The main content text (for Content items)
     usfm_reference_text: Optional[str] = None  # Lazily loaded
 
     def add_warning(self, message: str):
@@ -281,6 +282,9 @@ def validate_plaintext(title: str, content: dict, key: str, greenscreen_screen_i
         result.prior_matches = prior_matches
         if prior_matches:
             result.add_info(f"Found {len(prior_matches)} similar prior items")
+
+        # Add the main content for reference
+        result.main_content = main_content
         return result
 
     translation_content = decode_richtextXML(content[translation_key])
@@ -680,6 +684,11 @@ class ValidateProclaimGUI:
             for match in item.prior_matches:
                 self.append_detail(f"  • {match['date_given']} - {match['title']} (similarity: {match['ratio']:.2f})")
                 self.append_detail(f"    {match['snippet']}")
+
+        if item.main_content:
+            self.append_detail("\n📝 Main Content:")
+            for line in item.main_content.strip().split('\n'):
+                self.append_detail(line)
 
         if item.debug:
             self.append_detail("\n🔍 Debug info:")

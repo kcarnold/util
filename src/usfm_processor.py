@@ -160,15 +160,17 @@ def load_book_abbreviations() -> Dict[str, str]:
     return name_to_id
 
 
-def parse_single_verse_reference(ref: str) -> Tuple[str, Optional[str], str, Optional[str]]:
+def parse_single_verse_reference(ref: str) -> Tuple[str, Optional[str], Optional[str], Optional[str]]:
     """Parse a single verse reference into (book, chapter, start_verse, end_verse).
 
     Supports formats like:
     - "Psalm 153:2" -> ("Psalm", "153", "2", None)
     - "Matthew 1:18-20" -> ("Matthew", "1", "18", "20")
-    - "Matthew 6" -> ("Matthew", "6", "1", None) for entire chapter
+    - "Matthew 6" -> ("Matthew", "6", None, None) for entire chapter
     - "Jude 3" -> ("Jude", None, "3", None) for single-chapter books
     - "Exodus 15:29-16:2" -> ("Exodus", "15", "29", "16:2") for cross-chapter ranges
+
+    Note: start_verse=None indicates "entire chapter" (distinct from verse "1")
     """
     ref = ref.replace('–', '-')  # Normalize dash characters
 
@@ -210,17 +212,19 @@ def parse_single_verse_reference(ref: str) -> Tuple[str, Optional[str], str, Opt
             return book_name, None, number, None
         else:
             # For multi-chapter books, the number is the chapter (return entire chapter)
-            return book_name, number, "1", None
+            # Use start_verse=None to signal "entire chapter" (distinct from verse "1")
+            return book_name, number, None, None
 
     raise ValueError(f"Invalid verse reference format: {ref}")
 
 
-def parse_verse_reference(ref: str) -> List[Tuple[str, Optional[str], str, Optional[str]]]:
+def parse_verse_reference(ref: str) -> List[Tuple[str, Optional[str], Optional[str], Optional[str]]]:
     """Parse a verse reference into a list of (book, chapter, start_verse, end_verse) tuples.
 
     Supports formats like:
     - "Psalm 153:2" -> [("Psalm", "153", "2", None)]
     - "Matthew 1:18-20" -> [("Matthew", "1", "18", "20")]
+    - "Matthew 6" -> [("Matthew", "6", None, None)] for entire chapter
     - "Exodus 15:1-2,11-15" -> [("Exodus", "15", "1", "2"), ("Exodus", "15", "11", "15")]
     - "Exodus 15:29-16:2" -> [("Exodus", "15", "29", "16:2")]
     """
@@ -275,11 +279,12 @@ def find_book_in_usfm_files(book_name: str, file_contents: Dict[str, str], name_
     raise ValueError(f"Book {book_name} ({book_id}) not found in USFM files")
 
 
-def extract_verses_from_usj(usj: Dict[str, Any], chapter: Optional[str], start_verse: str, end_verse: Optional[str]) -> List[str]:
+def extract_verses_from_usj(usj: Dict[str, Any], chapter: Optional[str], start_verse: Optional[str], end_verse: Optional[str]) -> List[str]:
     """Extract specific verses from a USJ structure.
 
     Handles both single-chapter ranges and cross-chapter ranges.
     For cross-chapter ranges, end_verse should be in format "chapter:verse" (e.g., "16:2").
+    If start_verse is None, extracts the entire chapter.
     """
     usj_content = usj['content']
 
@@ -355,8 +360,8 @@ def extract_verses_from_usj(usj: Dict[str, Any], chapter: Optional[str], start_v
         # Single chapter range (original logic)
         target_chapter = chapter or "1"
 
-        # Handle entire chapter request (start_verse="1" and end_verse=None)
-        if start_verse == "1" and end_verse is None:
+        # Handle entire chapter request (start_verse=None)
+        if start_verse is None:
             # Collect all verses in the chapter
             cur_chapter = None
             cur_verse = None
@@ -449,14 +454,14 @@ def extract_verses_from_usj(usj: Dict[str, Any], chapter: Optional[str], start_v
             return result
 
 
-def extract_verses_from_sqlite(db_path: str, book_name: str, chapter: Optional[str], start_verse: str, end_verse: Optional[str], name_to_id: Dict[str, str]) -> List[str]:
+def extract_verses_from_sqlite(db_path: str, book_name: str, chapter: Optional[str], start_verse: Optional[str], end_verse: Optional[str], name_to_id: Dict[str, str]) -> List[str]:
     """Extract verses from a SQLite database.
 
     Args:
         db_path: Path to the SQLite database
         book_name: Name of the book
         chapter: Chapter number (or None for single-chapter books)
-        start_verse: Starting verse number
+        start_verse: Starting verse number (or None for entire chapter)
         end_verse: Ending verse (or None for single verse, or "chapter:verse" for cross-chapter)
 
     Returns:
@@ -504,7 +509,7 @@ def extract_verses_from_sqlite(db_path: str, book_name: str, chapter: Optional[s
         # Single chapter range
         target_chapter = int(chapter or "1")
 
-        if start_verse == "1" and end_verse is None:
+        if start_verse is None:
             # Entire chapter
             cursor.execute("""
                 SELECT verse, text

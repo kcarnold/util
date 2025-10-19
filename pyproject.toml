@@ -4,6 +4,7 @@ version = "0.1.0"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "jupyter>=1.1.1",
     "lxml==5.2.2",
     "pandas>=2.3.0",
     "playwright>=1.55.0",
@@ -17,3 +18,8 @@ validate_proclaim = "validate_proclaim:main"
 extract_usfm = "extract_usfm:main"
 extract_verses = "usfm_processor:main"
 preprocess_usfm = "preprocess_usfm_to_sqlite:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]

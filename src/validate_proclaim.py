@@ -224,6 +224,12 @@ def validate_songlyrics(title: str, content: dict) -> ValidationResult:
     translations = [key for key in content if key.startswith("slideOutput") and key.endswith("RichTextXml")]
     if len(translations) != 1:
         result.add_warning(f"Expected one translation, found {len(translations)}")
+        # Show the song text, just like we do for content items
+        try:
+            song_text = decode_richtextXML(content['_richtextfield:Lyrics'])
+            result.main_content = song_text
+        except Exception as e:
+            result.add_warning(f"Error extracting song text: {e}")
         return result
     translation_key = translations[0]
 
